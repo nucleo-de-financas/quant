@@ -37,7 +37,7 @@ class Intervalo(Enum):
 
 
 class Tickers(Enum):
-    PETR3 = 'PETR4' + '.SA'
+    PETR3 = 'PETR3' + '.SA'
     PETR4 = 'PETR4' + '.SA'
 
 
@@ -54,12 +54,13 @@ class Requisitor:
 
 class AtivoB3:
     """Pandas Dataframe padronizado para return."""
-    def __init__(self, datas: List, adj_close: List, open_: List, high: List, low: List):
+    def __init__(self, datas: List, adj_close: List, open_: List, high: List, low: List, volume: List):
         self._tabela = pd.DataFrame(index=datas)
         self._tabela['adj close'] = adj_close
         self._tabela['open'] = open_
         self._tabela['high'] = high
         self._tabela['low'] = low
+        self._tabela['volume'] = volume
 
     def get(self):
         return self._tabela
@@ -81,14 +82,15 @@ class Tratamento:
 
         close = self.df['adj close'].tolist()
         open_ = self.df['open'].tolist()
-        high = self.df['low'].tolist()
-        low = self.df['high'].tolist()
-
+        low = self.df['low'].tolist()
+        high = self.df['high'].tolist()
+        volume = self.df['volume'].tolist()
         historico = AtivoB3(datas=index,
                             adj_close=close,
                             open_=open_,
                             high=high,
-                            low=low)
+                            low=low,
+                            volume=volume)
 
         return historico
 
