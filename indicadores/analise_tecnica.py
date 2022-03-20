@@ -1,8 +1,9 @@
 from coletar_dados.yahoo.historical_data import Api, Intervalo, Periodo, Tickers, AtivoB3
 
+x = 1
 
-class MediaMovel:
 
+class MediaMovel13:
     def __init__(self, serie: AtivoB3, janela: int):
         self.df = serie.get()
         self.janela = janela
