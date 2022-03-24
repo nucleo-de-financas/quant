@@ -55,3 +55,15 @@ predefinidas pela 'class' SeletoresMediaMovel.
 
 Depois, chama-se o método calcular(). O retorno são pd.Series individuais.
 
+## Exemplo
+
+Coletando dados de um em um dia (YahooIntervalo), durante o total de um ano (YahooPeriodo) da Petrobras (YahoooTicker), por meio da API da yahoo, chamando-se o histórico.
+
+Depois, foi salvo na variável PETR4.
+
+    PETR4 = YahooAPI(YahooIntervalo.DIA_1, YahooPeriodo.ANO_1, YahooTickers.PETR4).historico()
+
+Depois, são calculadas todas as médias móveis usando a Class CalculadoraMediaMovel e o método calcular.
+
+    print(CalculadoraMediaMovel(ativo=PETR4,
+                                media_movel=[seletor for seletor in SeletorMediaMovel], janela=10).calcular())
