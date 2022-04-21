@@ -208,7 +208,7 @@ class Transacoes:
 class Gerenciador:
 
     transacoes: Transacoes = Transacoes()
-    proibir_aumentar_pos: bool = False
+    proibir_aumentar_pos: bool = True
 
     def posicao(self) -> Posicao:
         """ Retorna a posição da estratégia. """
@@ -239,7 +239,7 @@ class Gerenciador:
         if preco < 0:
             raise PrecoNegativoErro(f"Você inseriu um preço negativo: {preco}")
 
-        if self.proibir_aumentar_pos and self.transacoes.qtde_pos() > 0:
+        if self.proibir_aumentar_pos and self.transacoes.qtde_pos() < 0:
             raise AumentarPosicaoErro("Você tentou aumentar o tamanho da posição de venda "
                                       "e não é permitido pelo gerenciador.")
         if quantidade == 0:
@@ -273,7 +273,7 @@ class Gerenciador:
         self.transacoes.adicionar(preco=preco, quantidade=-quantidade)
 
     def obter_transacoes(self):
-        return self.transacoes.historico
+        return self.transacoes
 
 
 if __name__ == '__main__':
