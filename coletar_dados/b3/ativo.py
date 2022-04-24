@@ -19,7 +19,7 @@ class Pregao:
 @dataclass
 class AtivoB3:
     """Dataclass padronizado para todos os ativos da Bolsa de Valores de SP."""
-    horario: List[date | datetime] = field(default_factory=lambda: [])
+    data: List[date | datetime] = field(default_factory=lambda: [])
     fechamento: List[float] = field(default_factory=lambda: [])
     abertura: List[float] = field(default_factory=lambda: [])
     minima: List[float] = field(default_factory=lambda: [])
@@ -27,7 +27,7 @@ class AtivoB3:
     volume: List[float] = field(default_factory=lambda: [])
 
     def add_dia(self, dia: Pregao):
-        self.horario.append(dia.horario)
+        self.data.append(dia.horario)
         self.fechamento.append(dia.fechamento)
         self.abertura.append(dia.abertura)
         self.minima.append(dia.minima)
@@ -36,9 +36,9 @@ class AtivoB3:
 
     def para_df(self):
         dataframe = pd.DataFrame.from_dict(self.__dict__)
-        dataframe.index = pd.DatetimeIndex(self.horario)
-        dataframe.index.name = 'horario'
-        dataframe.drop(['horario'], inplace=True, axis=1)
+        dataframe.index = pd.DatetimeIndex(self.data)
+        dataframe.index.name = 'data'
+        dataframe.drop(['data'], inplace=True, axis=1)
         return dataframe
 
 
