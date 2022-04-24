@@ -51,21 +51,17 @@ class CalculadoraMediaMovel:
     media_movel: List[SeletorMediaMovel] | SeletorMediaMovel | None
     janela: int
     como_sinal: bool = True
-    dataframe: pd.DataFrame | None = None
+    _dataframe: pd.DataFrame | None = None
 
     @staticmethod
     def _juntar_coluna_ao_df(coluna: pd.Series, df: pd.DataFrame):
         return pd.concat([coluna, df], axis=1)
 
-    def obter_dataframe_de_dataclass(self) -> None:
-        self.dataframe = pd.DataFrame.from_dict(self.ativo.__dict__)
-        self.dataframe.index = pd.DatetimeIndex(self.dataframe['horario'])
-
     def _calcular_media_movel(self, media_movel: SeletorMediaMovel) -> pd.Series:
-        if self.dataframe is None:
-            self.obter_dataframe_de_dataclass()
+        if self._dataframe is None:
+            self._dataframe = self.ativo.para_df()
 
-        func = getattr(self.dataframe.ta, media_movel.value)
+        func = getattr(self._dataframe.ta, media_movel.value)
         serie_temporal = func(length=self.janela, close='fechamento', high='maxima', low='minima', open='abertura',
                               volume='volume')
         return serie_temporal
