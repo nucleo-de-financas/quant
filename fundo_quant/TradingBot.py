@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Union
+from typing import Union, List
 
 import pandas as pd
 import datetime
@@ -80,8 +80,20 @@ class Operacao:
 
     def retorno_percentual(self, preco_atual: float):
         return preco_atual / self.preco - 1
+    
 
+@dataclass
+class Operacoes:
+    """ Responsabilidade de separar/organizar as operações de um mesmo ativo. Como se fosse uma espécie de histórico. 
+        Esse histórico terá vários métodos. """
+    
+    ativo: str
+    operacoes: List[Operacao]
+    
+    def preco_medio(self):
+        pass
 
+   
 class Executor(ABC):
 
     @abstractmethod
@@ -105,30 +117,31 @@ class TrendFollowingBot:
     estrategia_compra: EstrategiaCompra
     estrategia_venda: EstrategiaVenda
     executor: ExecutorTF
-    stop_loss: StopLoss | None = None
-    stop_gain: StopGain | None = None
-    valor_inicial: float = 100
-
-    # Não acessíveis
-    _posicao: Posicao = Posicao.ZERADO
-    _sinal: Sinalizacao = Sinalizacao.MANTER
 
     def track_um_ativo(self, timeseries: pd.Series):
 
+        operacoes = []
+
+        # Iterando a quantidade de dias
         for dia in range(len(timeseries)):
 
             # Acionando estratégia
             deve_comprar = self.estrategia_compra.deve_comprar()
             deve_vender = self.estrategia_venda.deve_vender()
-            
+
+            # Executando Sinais
             if deve_comprar != Sinalizacao.MANTER:
-                self.executor.executar(deve_comprar, horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
-                
+                op = self.executor.executar(deve_comprar,
+                                            horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
+                operacoes.append(op)
+
             elif self.estrategia_venda.deve_vender() != Sinalizacao.MANTER:
-                self.executor.executar(deve_vender, horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
+                op = self.executor.executar(deve_vender,
+                                            horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
+                operacoes.append(op)
 
             # Avançando simulação de dados interna.
             self.estrategia_compra.avancar_dia()
             self.estrategia_compra.avancar_dia()
 
-# Todo: Colocar separar de ordens fechadas e abertas e também pegar a posicao.
+# Todo: Colocar separar de ordens fechadas e abertas e também pegar a posição.
