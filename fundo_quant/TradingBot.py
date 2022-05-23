@@ -3,8 +3,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 
+import numpy as np
 import pandas as pd
 import datetime
+from typing import List
 
 
 class Posicao(Enum):
@@ -61,12 +63,37 @@ class TipoOperacao(Enum):
     VENDA = 'V'
 
 
+class InconsistenciaNaOperacaoError(Exception):
+    
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
+
+
 @dataclass
 class Operacao:
     horario: datetime.datetime
     quantidade: int
     preco: float
     tipo: TipoOperacao
+
+    def validar_consistencia_quantidades(self):
+        if self.tipo == TipoOperacao.VENDA and self.quantidade < 0:
+            return True
+        if self.tipo == TipoOperacao.COMPRA and self.quantidade > 0:
+            return True
+        if self.tipo == TipoOperacao.VENDA and self.quantidade > 0:
+            return False
+        if self.tipo == TipoOperacao.COMPRA and self.quantidade < 0:
+            return False
+
+    def __post_init__(self):
+        if not self.validar_consistencia_quantidades():
+            raise InconsistenciaNaOperacaoError(f'A quantidade {self.quantidade} não é consistente como o tipo de '
+                                                f'operação de {self.tipo.name}')
 
     def retorno_nominal(self, preco_atual: float):
         return preco_atual - self.preco
@@ -82,17 +109,45 @@ class Operacoes:
 
     ativo: str
     _operacoes = []
+    _fechadas = []
+    _abertas = []
 
-    def preco_medio(self):
-        pass
+    def preco_medio(self) -> float:
+        self._segregar_ops()
+
+        # Se tiver zerado, não vai ter operações abertas.
+        if len(self._abertas) <= 0:
+            return np.NAN
+
+        # Só se utiliza operações em aberto.
+        df = self._abertas.copy()
+        qtde_cum = self.calcular_quantidade_cumulativa(df['quantidade'])
+        ultima_pos = self.calcular_posicao(qtde_cum).iloc[-1]
+
+        qtde_posicionada = 0
+        pmedio = 0
+        if ultima_pos == Posicao.COMPRADO:
+            for preco, quantidade in zip(df.preco, df.quantidade):
+                if quantidade > 0:
+                    pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
+                qtde_posicionada = qtde_posicionada + quantidade
+
+        elif ultima_pos == Posicao.VENDIDO:
+            for preco, quantidade in zip(df.preco, df.quantidade):
+                if quantidade < 0:
+                    pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
+                qtde_posicionada = qtde_posicionada + quantidade
+
+        return pmedio
 
     def registrar(self, operacao: Operacao):
         self._operacoes.append(operacao)
 
-    def _ops_to_df(self):
+    @staticmethod
+    def _ops_to_df(operacoes: List[Operacao]):
         """ Transforma a lista de operações em dataframe. """
         dicts = []
-        for op in self._operacoes:
+        for op in operacoes:
             dicts.append(op.__dict__)
         return pd.DataFrame(dicts).set_index('horario')
 
@@ -114,19 +169,33 @@ class Operacoes:
         return quantidade.cumsum()
 
     @staticmethod
-    def calcular_posicao(quantidade_cumulativa: pd.Series):
+    def calcular_posicao(qtde_cum: pd.Series):
         # Definindo a série de posição.
-        posicao = quantidade_cumulativa.mask(quantidade_cumulativa > 0, Posicao.COMPRADO)
-        posicao = posicao.mask(posicao < 0, Posicao.VENDIDO)
-        return posicao.mask(posicao == 0, Posicao.ZERADO)
+        pos = qtde_cum.copy()
+        pos.name = 'posicao'
+        comprado = pos.loc[pos > 0]
+        vendido = pos.loc[pos < 0]
+        zerado = pos.loc[pos < 0]
+        comprado.loc[:] = Posicao.COMPRADO
+        vendido.loc[:] = Posicao.VENDIDO
+        zerado.loc[:] = Posicao.VENDIDO
+        return pd.concat([comprado, vendido, zerado]).sort_index()
 
-    def segregar_ops(self):
+    def _segregar_ops(self):
         """ Segrega as operações em: (1) operações passadas e (2) operações atuais. """
-        df = self._ops_to_df()
+        df = self._ops_to_df(self._operacoes)
 
-        x = self.identifica_posicoes_zeros(df['quantidade'])
-        print(x)
-        print('s')
+        inversoes = self.identifica_posicoes_zeros(df['quantidade'])
+
+        # Filtra as operações abertas, porém inclui a última operação fechada.
+        op_abertas = df.loc[inversoes[-1]:]
+        # Exclui a última operação fechada
+        self._abertas = op_abertas[1:]
+
+        # Operações Fechadas
+        op_fechadas = df.loc[:self._abertas.index[-1]]
+        # Porém, inclui a primeira operação em aberto, portanto, exclui-se.
+        self._fechadas = op_fechadas[:-1]
 
 
 class Executor(ABC):
@@ -179,19 +248,26 @@ class TrendFollowingBot:
             self.estrategia_compra.avancar_dia()
             self.estrategia_venda.avancar_dia()
 
+        return operacoes
 
-# Todo: Colocar separar de ordens fechadas e abertas e também pegar a posição.
+# Todo: Colocar valor inicial de trade no histórico e no bot.
+
 
 if __name__ == '__main__':
     petr = Operacoes('PETR4')
+    print(petr)
     petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=10, tipo=TipoOperacao.VENDA))
     time.sleep(0.1)
     petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=50, tipo=TipoOperacao.VENDA))
     time.sleep(0.1)
     petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=3, preco=50, tipo=TipoOperacao.COMPRA))
     time.sleep(0.1)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=50, tipo=TipoOperacao.COMPRA))
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=50, tipo=TipoOperacao.VENDA))
     time.sleep(0.1)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=1, preco=50, tipo=TipoOperacao.COMPRA))
-    x = petr.segregar_ops()
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=50, tipo=TipoOperacao.VENDA))
+    time.sleep(0.1)
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=100, tipo=TipoOperacao.VENDA))
+    time.sleep(0.1)
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=100, tipo=TipoOperacao.VENDA))
+    x = petr.preco_medio()
     print('ok')
