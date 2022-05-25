@@ -74,6 +74,16 @@ class InconsistenciaNaOperacaoError(Exception):
         return self.message
 
 
+class SaldoError(Exception):
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
+
+
 @dataclass
 class Operacao:
     horario: datetime.datetime
@@ -81,13 +91,24 @@ class Operacao:
     preco: float
     _tipo: TipoOperacao | None = None
 
-    def __post_init__(self):
+    def _inferir_tipo_operacao(self):
         if self.quantidade > 0:
             self._tipo = TipoOperacao.COMPRA
         elif self.quantidade < 0:
             self._tipo = TipoOperacao.VENDA
         else:
             raise InconsistenciaNaOperacaoError("Quantidade a ser operada não pode ser zero.")
+
+    def __post_init__(self):
+        # Infere o tipo de operação pela quantidade a ser executada.
+        self._inferir_tipo_operacao()
+
+    @property
+    def tipo(self):
+        return self._tipo
+
+    def valor_financeiro(self):
+        return self.quantidade * self.preco
 
     def retorno_nominal(self, preco_atual: float):
         return preco_atual - self.preco
@@ -102,40 +123,51 @@ class Operacoes:
         Esse histórico terá vários métodos. """
 
     ativo: str
+    pl_inicial: float
+
     _operacoes = []
     _fechadas = []
     _abertas = []
 
-    def preco_medio(self) -> float:
-        self._segregar_ops()
+    def __post_init__(self):
+        self._caixa = [self.pl_inicial]
 
-        # Se tiver zerado, não vai ter operações abertas.
-        if len(self._abertas) <= 0:
-            return np.NAN
+    @property
+    def caixa_atual(self):
+        return self._caixa[-1]
 
-        # Só se utiliza operações em aberto.
-        df = self._abertas.copy()
-        qtde_cum = self.calcular_quantidade_cumulativa(df['quantidade'])
-        ultima_pos = self.calcular_posicao(qtde_cum).iloc[-1]
+    def _verificar_operacao(self, operacao: Operacao):
 
-        qtde_posicionada = 0
-        pmedio = 0
-        if ultima_pos == Posicao.COMPRADO:
-            for preco, quantidade in zip(df.preco, df.quantidade):
-                if quantidade > 0:
-                    pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
-                qtde_posicionada = qtde_posicionada + quantidade
+        def verificar_saldo_compra() -> bool:
+            """ Retorna se é possível comprar. """
+            if self.caixa_atual >= operacao.valor_financeiro():
+                return True
+            else:
+                return False
 
-        elif ultima_pos == Posicao.VENDIDO:
-            for preco, quantidade in zip(df.preco, df.quantidade):
-                if quantidade < 0:
-                    pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
-                qtde_posicionada = qtde_posicionada + quantidade
+        if operacao.tipo == TipoOperacao.COMPRA:
+            return verificar_saldo_compra()
+        else:
+            return True
 
-        return pmedio
+    def _calcular_novo_saldo(self, operacao: Operacao):
+        self._caixa.append(self.caixa_atual - operacao.valor_financeiro())
 
     def registrar(self, operacao: Operacao):
+        # Toda a vez que for registrar, temos que verificar se é um registro possível. Isto é, se a operação
+        # pode ser realizada.
+        if not self._verificar_operacao(operacao):
+            raise SaldoError(f"Saldo insuficiente para a compra."
+                             f"\nSaldo: {round(self.caixa_atual, 2)}"
+                             f"\nValor Financeiro: {round(operacao.valor_financeiro(), 2)}")
+
+        # Adiciona as transações
         self._operacoes.append(operacao)
+
+        # Recalcula o saldo
+        self._calcular_novo_saldo(operacao)
+
+        # Separa as operações em abertas ou fechadas.
         self._ajustar_operacoes()
 
     @staticmethod
@@ -215,6 +247,34 @@ class Operacoes:
         # Porém, inclui a primeira operação em aberto, portanto, exclui-se.
         self._fechadas = op_fechadas[:-1]
 
+    def preco_medio(self) -> float:
+        self._segregar_ops()
+
+        # Se tiver zerado, não vai ter operações abertas.
+        if len(self._abertas) <= 0:
+            return np.NAN
+
+        # Só se utiliza operações em aberto.
+        df = self._abertas.copy()
+        qtde_cum = self.calcular_quantidade_cumulativa(df['quantidade'])
+        ultima_pos = self.calcular_posicao(qtde_cum).iloc[-1]
+
+        qtde_posicionada = 0
+        pmedio = 0
+        if ultima_pos == Posicao.COMPRADO:
+            for preco, quantidade in zip(df.preco, df.quantidade):
+                if quantidade > 0:
+                    pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
+                qtde_posicionada = qtde_posicionada + quantidade
+
+        elif ultima_pos == Posicao.VENDIDO:
+            for preco, quantidade in zip(df.preco, df.quantidade):
+                if quantidade < 0:
+                    pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
+                qtde_posicionada = qtde_posicionada + quantidade
+
+        return pmedio
+
 
 class Executor(ABC):
 
@@ -240,9 +300,9 @@ class TrendFollowingBot:
     estrategia_venda: EstrategiaVenda
     executor: ExecutorTF
 
-    def track_um_ativo(self, timeseries: pd.Series):
+    def track_um_ativo(self, timeseries: pd.Series, pl_inicial):
 
-        operacoes = Operacoes(ativo=str(timeseries.name))
+        operacoes = Operacoes(ativo=str(timeseries.name), pl_inicial=pl_inicial)
 
         # Iterando a quantidade de dias
         for dia in range(len(timeseries)):
@@ -257,7 +317,7 @@ class TrendFollowingBot:
                                             horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
                 operacoes.registrar(op)
 
-            elif self.estrategia_venda.deve_vender() != Sinalizacao.MANTER:
+            elif deve_vender != Sinalizacao.MANTER:
                 op = self.executor.executar(deve_vender,
                                             horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=-1)
                 operacoes.registrar(op)
@@ -268,18 +328,9 @@ class TrendFollowingBot:
 
         return operacoes
 
-# Todo: Colocar valor inicial e relacionar ele a possibilidade de comprar ou não. Literalmente um saldo.
-# Todo: Criar um método para marcar esse saldo ao longo do tempo.
-
 
 if __name__ == '__main__':
-    petr = Operacoes('PETR4')
-    print(petr)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=10))
+    petr = Operacoes('PETR4', 100)
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=2, preco=49.98))
     time.sleep(0.1)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-1, preco=50))
-    time.sleep(0.1)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=7, preco=50))
-    time.sleep(0.1)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=5, preco=100))
-    print(petr.preco_medio())
+    print(f'O caixa final é: {petr.caixa_atual}')
