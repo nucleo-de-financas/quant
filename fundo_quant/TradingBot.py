@@ -1,4 +1,3 @@
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -6,7 +5,7 @@ from enum import Enum, auto
 import numpy as np
 import pandas as pd
 import datetime
-from typing import List
+from typing import List, Tuple
 from copy import deepcopy
 
 
@@ -119,8 +118,7 @@ class Operacao:
 
 @dataclass
 class Operacoes:
-    """ Responsabilidade de separar/organizar as operações de um mesmo ativo. Como se fosse uma espécie de histórico.
-        Esse histórico terá vários métodos. """
+    """ Responsabilidade de separar/organizar as operações de um mesmo ativo. """
 
     ativo: str
     pl_inicial: float
@@ -304,6 +302,16 @@ class ExecutorTF(Executor):
             return Operacao(horario=horario, quantidade=qtde, preco=preco)
 
 
+class FormatoError(Exception):
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
+
+
 @dataclass
 class TrendFollowingBot:
 
@@ -312,9 +320,27 @@ class TrendFollowingBot:
     estrategia_venda: EstrategiaVenda
     executor: ExecutorTF
 
-    def track_um_ativo(self, timeseries: pd.Series, pl_inicial):
+    @staticmethod
+    def _verificar_timeseries(timeseries: pd.Series) -> bool:
+        verificacoes = {'index': False, 'valores': False}
+
+        if timeseries.index.name == 'data' and timeseries.index.dtype == '<M8[ns]':
+            verificacoes['index'] = True
+        if timeseries.index.dtype == 'float64' or timeseries.index.dtype == 'int64':
+            verificacoes['valores'] = True
+
+        return not(False in list(verificacoes.values()))
+
+    def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Operacoes, pd.Series]:
+
+        if not self._verificar_timeseries(timeseries):
+            raise FormatoError('O formato da série temporal não corresponde à:\n'
+                               'index.name = data'
+                               'index.dtype: [datetime64[ns]]'
+                               'values: float64 | int64')
 
         operacoes = Operacoes(ativo=str(timeseries.name), pl_inicial=pl_inicial)
+        rentabilidade = {'data': [], 'valor': []}
 
         # Iterando a quantidade de dias
         for dia in range(len(timeseries)):
@@ -334,18 +360,11 @@ class TrendFollowingBot:
                                             horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=-1)
                 operacoes.registrar(op)
 
+            rentabilidade['data'].append(timeseries.index[dia])
+            rentabilidade['valor'].append(operacoes.calcular_pl_atual(timeseries[dia]))
+
             # Avançando simulação de dados interna.
             self.estrategia_compra.avancar_dia()
             self.estrategia_venda.avancar_dia()
 
-        return operacoes
-
-
-if __name__ == '__main__':
-    petr = Operacoes('PETR4', 100)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=10, preco=10))
-    time.sleep(0.1)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-10, preco=12))
-    time.sleep(0.1)
-    print(f'O caixa final é: {petr.caixa_atual}')
-    print(f'O retorno acumulado é {round(petr.retorno_acumulado(preco_atual=14) * 100, 2)}%')
+        return operacoes, pd.Series(rentabilidade['valor'], index=rentabilidade['data'])
