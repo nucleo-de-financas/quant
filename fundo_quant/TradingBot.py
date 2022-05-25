@@ -134,7 +134,19 @@ class Operacoes:
 
     @property
     def caixa_atual(self):
-        return self._caixa[-1]
+        return round(self._caixa[-1], 2)
+
+    def obter_pos_atual(self):
+        return self._ops_to_df(self._operacoes).quantidade.sum()
+
+    def calcular_valor_pos(self, preco_atual: float):
+        return round(self.obter_pos_atual() * preco_atual, 2)
+
+    def calcular_pl_atual(self, preco_atual: float):
+        return round(self.caixa_atual + self.calcular_valor_pos(preco_atual=preco_atual), 2)
+
+    def retorno_acumulado(self, preco_atual):
+        return (self.calcular_pl_atual(preco_atual=preco_atual) / self.pl_inicial) - 1
 
     def _verificar_operacao(self, operacao: Operacao):
 
@@ -331,6 +343,9 @@ class TrendFollowingBot:
 
 if __name__ == '__main__':
     petr = Operacoes('PETR4', 100)
-    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=2, preco=49.98))
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=10, preco=10))
+    time.sleep(0.1)
+    petr.registrar(Operacao(horario=datetime.datetime.now(), quantidade=-10, preco=12))
     time.sleep(0.1)
     print(f'O caixa final é: {petr.caixa_atual}')
+    print(f'O retorno acumulado é {round(petr.retorno_acumulado(preco_atual=14) * 100, 2)}%')
