@@ -1,10 +1,9 @@
 import pandas as pd
-import pandas_ta as ta
-from coletar_dados.b3.ativo import AtivoB3
+from api.b3.ativo import AtivoB3
 from enum import Enum
 from dataclasses import dataclass
 from typing import List
-from coletar_dados.b3.yahoo.api import YahooAPI, YahooIntervalo, YahooTickers, YahooPeriodo
+from api.yahoo import YahooAPI, YahooIntervalo, YahooTickers, YahooPeriodo
 
 
 class SeletorMediaMovel(Enum):
