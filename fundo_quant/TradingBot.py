@@ -85,6 +85,11 @@ class SaldoError(Exception):
 
 @dataclass
 class Operacao:
+    """
+    horario: Horario da transação (datetime)
+    quantidade: Quantidade transacionada. (int)
+    preco: preço do mercado naquele momento. (float)
+     """
     horario: datetime.datetime
     quantidade: int
     preco: float
@@ -124,8 +129,8 @@ class Operacoes:
     pl_inicial: float
 
     _operacoes = []
-    _fechadas = []
-    _abertas = []
+    _fechadas = pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
+    _abertas = pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
 
     def __post_init__(self):
         self._caixa = [self.pl_inicial]
@@ -163,9 +168,52 @@ class Operacoes:
     def _calcular_novo_saldo(self, operacao: Operacao):
         self._caixa.append(self.caixa_atual - operacao.valor_financeiro())
 
+    def _segregar_ops(self):
+        """ Segrega as operações em: (1) operações passadas e (2) operações atuais. """
+        df = self._ops_to_df(self._operacoes)
+
+        inversoes = self.identifica_posicoes_zeros(df['quantidade'])
+
+        if len(inversoes) == 0:
+            self._abertas = df
+            self._fechadas = pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
+            return
+
+        # Filtra as operações abertas, porém inclui a última operação fechada.
+        op_abertas = df.loc[inversoes[-1]:]
+
+        # Exclui a última operação fechada
+        self._abertas = op_abertas[1:]
+
+        # Operações Fechadas
+        op_fechadas = df.loc[:inversoes[-1]]
+
+        # Porém, inclui a primeira operação em aberto, portanto, exclui-se.
+        self._fechadas = op_fechadas[:-1]
+
     def registrar(self, operacao: Operacao):
         # Toda a vez que for registrar, temos que verificar se é um registro possível. Isto é, se a operação
         # pode ser realizada.
+
+        def _ajustar_operacoes():
+            operacoes_ajustadas = []
+            quantidade_cum0 = 0
+            quantidade_cum1 = 0
+            for op in self._operacoes:
+                quantidade_cum1 += op.quantidade
+                if quantidade_cum1 > 0 > quantidade_cum0 or quantidade_cum1 < 0 < quantidade_cum0:
+                    operacao1 = deepcopy(op)
+                    operacao2 = deepcopy(op)
+                    operacao1.quantidade = op.quantidade - quantidade_cum1
+                    operacao2.quantidade = quantidade_cum1
+                    operacoes_ajustadas.append(operacao1)
+                    operacoes_ajustadas.append(operacao2)
+                else:
+                    operacoes_ajustadas.append(op)
+                quantidade_cum0 += op.quantidade
+
+            self._operacoes = operacoes_ajustadas
+
         if not self._verificar_operacao(operacao):
             raise SaldoError(f"Saldo insuficiente para a compra."
                              f"\nSaldo: {round(self.caixa_atual, 2)}"
@@ -177,8 +225,11 @@ class Operacoes:
         # Recalcula o saldo
         self._calcular_novo_saldo(operacao)
 
-        # Separa as operações em abertas ou fechadas.
-        self._ajustar_operacoes()
+        # Ajusta operações para nunca inverter diretamente.
+        _ajustar_operacoes()
+
+        # Toda a vez que registrar, ele já segrega as operações.
+        self._segregar_ops()
 
     @staticmethod
     def _ops_to_df(operacoes: List[Operacao]):
@@ -195,7 +246,9 @@ class Operacoes:
         qtde_cum = self.calcular_quantidade_cumulativa(quantidades)
         qtde_cum_anterior = qtde_cum - quantidades
 
+        # Momento que inverteu de comprado para vendido.
         comprado_to_vendido = quantidades[(qtde_cum > 0) & (qtde_cum_anterior < 0)]
+        # Momentos que inverteram de vendido para comprado.
         vendido_to_comprado = quantidades[(qtde_cum < 0) & (qtde_cum_anterior > 0)]
         zerados = quantidades[qtde_cum == 0]
         toques_no_eixo = pd.concat([comprado_to_vendido, vendido_to_comprado, zerados]).sort_index()
@@ -214,76 +267,129 @@ class Operacoes:
         pos.name = 'posicao'
         comprado = pos.loc[pos > 0]
         vendido = pos.loc[pos < 0]
-        zerado = pos.loc[pos < 0]
+        zerado = pos.loc[pos == 0]
         comprado.loc[:] = Posicao.COMPRADO
         vendido.loc[:] = Posicao.VENDIDO
-        zerado.loc[:] = Posicao.VENDIDO
+        zerado.loc[:] = Posicao.ZERADO
         return pd.concat([comprado, vendido, zerado]).sort_index()
 
-    def _ajustar_operacoes(self):
-        operacoes_ajustadas = []
-        quantidade_cum0 = 0
-        quantidade_cum1 = 0
-        for operacao in self._operacoes:
-            quantidade_cum1 += operacao.quantidade
-            if quantidade_cum1 > 0 > quantidade_cum0 or quantidade_cum1 < 0 < quantidade_cum0:
-                operacao1 = deepcopy(operacao)
-                operacao2 = deepcopy(operacao)
-                operacao1.quantidade = operacao.quantidade - quantidade_cum1
-                operacao2.quantidade = quantidade_cum1
-                operacoes_ajustadas.append(operacao1)
-                operacoes_ajustadas.append(operacao2)
-            else:
-                operacoes_ajustadas.append(operacao)
-            quantidade_cum0 += operacao.quantidade
+    def _preco_medio(self, operacoes: pd.DataFrame):
 
-        self._operacoes = operacoes_ajustadas
-
-    def _segregar_ops(self):
-        """ Segrega as operações em: (1) operações passadas e (2) operações atuais. """
-        df = self._ops_to_df(self._operacoes)
-
-        inversoes = self.identifica_posicoes_zeros(df['quantidade'])
-
-        # Filtra as operações abertas, porém inclui a última operação fechada.
-        op_abertas = df.loc[inversoes[-1]:]
-
-        # Exclui a última operação fechada
-        self._abertas = op_abertas[1:]
-
-        # Operações Fechadas
-        op_fechadas = df.loc[:self._abertas.index[-1]]
-
-        # Porém, inclui a primeira operação em aberto, portanto, exclui-se.
-        self._fechadas = op_fechadas[:-1]
-
-    def preco_medio(self) -> float:
-        self._segregar_ops()
-
-        # Se tiver zerado, não vai ter operações abertas.
-        if len(self._abertas) <= 0:
+        if not len(operacoes) > 0:
             return np.NAN
 
-        # Só se utiliza operações em aberto.
-        df = self._abertas.copy()
-        qtde_cum = self.calcular_quantidade_cumulativa(df['quantidade'])
+        qtde_cum = self.calcular_quantidade_cumulativa(operacoes['quantidade'])
         ultima_pos = self.calcular_posicao(qtde_cum).iloc[-1]
 
         qtde_posicionada = 0
         pmedio = 0
         if ultima_pos == Posicao.COMPRADO:
-            for preco, quantidade in zip(df.preco, df.quantidade):
+            for preco, quantidade in zip(operacoes.preco, operacoes.quantidade):
                 if quantidade > 0:
                     pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
                 qtde_posicionada = qtde_posicionada + quantidade
 
         elif ultima_pos == Posicao.VENDIDO:
-            for preco, quantidade in zip(df.preco, df.quantidade):
+            for preco, quantidade in zip(operacoes.preco, operacoes.quantidade):
                 if quantidade < 0:
                     pmedio = (qtde_posicionada * pmedio + quantidade * preco) / (qtde_posicionada + quantidade)
                 qtde_posicionada = qtde_posicionada + quantidade
 
         return pmedio
+
+    def preco_medio(self) -> float:
+
+        # Só se utiliza operações em aberto.
+        if self._abertas is None:
+            return np.NAN
+        df = self._abertas.copy()
+
+        return self._preco_medio(df)
+
+    def _dividir_operacoes(self) -> List[pd.DataFrame]:
+        df = self.obter_df()
+        df['qtde_cum'] = self.calcular_quantidade_cumulativa(df['quantidade'])
+        id_ = 1
+        ids = []
+        for item in df['qtde_cum']:
+            ids.append(id_)
+            if item == 0:
+                id_ += 1
+        df['id'] = ids
+        # Ainda falta retornar uma lista de df separados por id.
+        return [i[1].drop(['id', 'qtde_cum'], axis=1) for i in df.groupby('id')]
+
+    def win_rate(self):
+        """ Calcula uma razão de ganhos. """
+        dfs = self._dividir_operacoes()
+        total_operacoes = 0
+        wins = 0
+        for df in dfs:
+            # Se tiver fechado.
+            if df['quantidade'].sum() == 0:
+                total_operacoes += 1
+                if (-df['quantidade'] * df['preco']).sum() > 0:
+                    wins += 1
+
+        # Falta desconsiderar operações em aberto.
+        if total_operacoes > 0:
+            return wins/total_operacoes
+        return np.NAN
+
+    def retornos_por_operacao(self):
+        dfs = self._dividir_operacoes()
+
+        # Se não tiver operações.
+        if len(dfs) < 0:
+            return np.NAN
+
+        def obter_posicao(posicao: pd.Series) -> Posicao:
+            return [x for x in posicao.unique().tolist() if x != Posicao.ZERADO][0]
+
+        retornos = {'inicio_operacao': [], 'fim_operacao': [], 'rentabilidade': []}
+        # Para cada operação.
+        for df in dfs:
+            # Se tiver fechado.
+            rentabilidade = {'quantidades': [], 'porcentagem': []}
+            if df['quantidade'].sum() == 0:
+
+                df['pos'] = self.calcular_posicao(self.calcular_quantidade_cumulativa(df['quantidade']))
+                pos = obter_posicao(df['pos'])
+                for index in range(len(df)):
+
+                    if pos == Posicao.COMPRADO and df['quantidade'].iloc[index] < 0:
+                        quantidade = df['quantidade'].iloc[index]
+                        rentabilidade['quantidades'].append(quantidade)
+                        porcentagem = df['preco'].iloc[index] / self._preco_medio(df.iloc[:index]) - 1
+                        rentabilidade['porcentagem'].append(porcentagem)
+
+                    elif pos == Posicao.VENDIDO and df['quantidade'].iloc[index] > 0:
+                        quantidade = df['quantidade'].iloc[index]
+                        rentabilidade['quantidades'].append(quantidade)
+                        porcentagem = self._preco_medio(df.iloc[:index]) / df['preco'].iloc[index] - 1
+                        rentabilidade['porcentagem'].append(porcentagem)
+
+                rent = pd.DataFrame(rentabilidade)
+                rent = (rent['quantidades'] * rentabilidade['porcentagem']).sum() / rent['quantidades'].sum()
+
+                retornos['inicio_operacao'].append(df.index[0])
+                retornos['fim_operacao'].append(df.index[-1])
+                retornos['rentabilidade'].append(rent)
+
+        return pd.DataFrame(retornos)
+
+    def obter_df(self):
+        return self._ops_to_df(self._operacoes)
+
+    @property
+    def pos_atual(self):
+        pos_atual_qtde = self.obter_pos_atual()
+        if pos_atual_qtde == 0:
+            return Posicao.ZERADO.name
+        elif pos_atual_qtde > 0:
+            return Posicao.COMPRADO.name
+        elif pos_atual_qtde < 0:
+            return Posicao.VENDIDO.name
 
 
 class Executor(ABC):
