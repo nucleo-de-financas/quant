@@ -51,27 +51,22 @@ class CalculadoraMediaMovel:
     media_movel: List[SeletorMediaMovel] | SeletorMediaMovel | None
     janela: int
     como_sinal: bool = True
-    dataframe: pd.DataFrame | None = None
+    _dataframe: pd.DataFrame | None = None
 
     @staticmethod
     def _juntar_coluna_ao_df(coluna: pd.Series, df: pd.DataFrame):
         return pd.concat([coluna, df], axis=1)
 
-    def obter_dataframe_de_dataclass(self) -> None:
-        self.dataframe = pd.DataFrame.from_dict(self.ativo.__dict__)
-
     def _calcular_media_movel(self, media_movel: SeletorMediaMovel) -> pd.Series:
-        if media_movel == SeletorMediaMovel.VWAP:
-            self.dataframe.index = pd.DatetimeIndex(self.dataframe['horario'])
+        if self._dataframe is None:
+            self._dataframe = self.ativo.para_df()
 
-        func = getattr(self.dataframe.ta, media_movel.value)
-        print(f'A média testada agora é {media_movel.value}')
-
-        return func(length=self.janela, close='fechamento', high='maxima', low='minima', open='abertura',
-                    volume='volume')
+        func = getattr(self._dataframe.ta, media_movel.value)
+        serie_temporal = func(length=self.janela, close='fechamento', high='maxima', low='minima', open='abertura',
+                              volume='volume')
+        return serie_temporal
 
     def _calular_medias_moveis(self) -> List[pd.Series]:
-        self.obter_dataframe_de_dataclass()
         return [self._calcular_media_movel(media_movel) for media_movel in self.media_movel]
 
     def calcular(self) -> List[pd.Series] | pd.Series | None:
