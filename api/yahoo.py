@@ -93,6 +93,7 @@ class HistoricoApi:
     def obter(self, frequencia, quanto_tempo) -> pd.DataFrame:
         df = download(self.ticker, period=frequencia, interval=quanto_tempo)
         df.columns = ['Abertura', 'Maxima', 'Minima', 'Fechamento', 'Fechamento Ajustado', 'Volume']
+        df.index.name = 'Data'
         return df
 
 
