@@ -26,7 +26,7 @@ class Sinalizacao(Enum):
 class EstrategiaCompra(ABC):
 
     @abstractmethod
-    def deve_comprar(self) -> Sinalizacao:
+    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
         pass
 
     @abstractmethod
@@ -37,7 +37,7 @@ class EstrategiaCompra(ABC):
 class EstrategiaVenda(ABC):
 
     @abstractmethod
-    def deve_vender(self) -> Sinalizacao:
+    def deve_vender(self, posicao: Posicao) -> Sinalizacao:
         pass
 
     @abstractmethod
@@ -140,7 +140,10 @@ class Operacoes:
         return round(self._caixa[-1], 2)
 
     def obter_pos_atual(self):
-        return self._ops_to_df(self._operacoes).quantidade.sum()
+        df = self._ops_to_df(self._operacoes)
+        if df is not None:
+            return df.quantidade.sum()
+        return 0
 
     def calcular_valor_pos(self, preco_atual: float):
         return round(self.obter_pos_atual() * preco_atual, 2)
@@ -171,7 +174,8 @@ class Operacoes:
     def _segregar_ops(self):
         """ Segrega as operações em: (1) operações passadas e (2) operações atuais. """
         df = self._ops_to_df(self._operacoes)
-
+        if df is None:
+            return
         inversoes = self.identifica_posicoes_zeros(df['quantidade'])
 
         if len(inversoes) == 0:
@@ -232,12 +236,13 @@ class Operacoes:
         self._segregar_ops()
 
     @staticmethod
-    def _ops_to_df(operacoes: List[Operacao]):
+    def _ops_to_df(operacoes: List[Operacao]) -> pd.DataFrame | None:
         """ Transforma a lista de operações em dataframe. """
         dicts = []
         for op in operacoes:
             dicts.append(op.__dict__)
-        return pd.DataFrame(dicts).set_index('horario')
+        if len(dicts) > 0:
+            return pd.DataFrame(dicts).set_index('horario')
 
     def identifica_posicoes_zeros(self, quantidades: pd.Series):
         """ Identifica os toques da quantidade cumulativa no valor de zero. Ou seja, ultrapassando de cima para baixo
@@ -379,7 +384,9 @@ class Operacoes:
         return pd.DataFrame(retornos)
 
     def obter_df(self):
-        return self._ops_to_df(self._operacoes)
+        df = self._ops_to_df(self._operacoes)
+        if df is None:
+            return pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
 
     @property
     def pos_atual(self):
@@ -420,22 +427,21 @@ class FormatoError(Exception):
 
 @dataclass
 class TrendFollowingBot:
-
     # Acessíveis
     estrategia_compra: EstrategiaCompra
     estrategia_venda: EstrategiaVenda
-    executor: ExecutorTF
+    executor: Executor = ExecutorTF()
 
     @staticmethod
     def _verificar_timeseries(timeseries: pd.Series) -> bool:
         verificacoes = {'index': False, 'valores': False}
 
-        if timeseries.index.name == 'data' and timeseries.index.dtype == '<M8[ns]':
+        if timeseries.index.name == 'data' or timeseries.index.name == 'Data':
             verificacoes['index'] = True
-        if timeseries.index.dtype == 'float64' or timeseries.index.dtype == 'int64':
+        if timeseries.dtype == 'float64' or timeseries.dtype == 'int64':
             verificacoes['valores'] = True
 
-        return not(False in list(verificacoes.values()))
+        return not (False in list(verificacoes.values()))
 
     def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Operacoes, pd.Series]:
 
@@ -447,24 +453,27 @@ class TrendFollowingBot:
 
         operacoes = Operacoes(ativo=str(timeseries.name), pl_inicial=pl_inicial)
         rentabilidade = {'data': [], 'valor': []}
+        pos: Posicao = Posicao.ZERADO
 
         # Iterando a quantidade de dias
         for dia in range(len(timeseries)):
 
             # Acionando estratégia
-            deve_comprar = self.estrategia_compra.deve_comprar()
-            deve_vender = self.estrategia_venda.deve_vender()
+            deve_comprar = self.estrategia_compra.deve_comprar(pos)
+            deve_vender = self.estrategia_venda.deve_vender(pos)
 
             # Executando Sinais
             if deve_comprar != Sinalizacao.MANTER:
-                op = self.executor.executar(deve_comprar,
+                op = self.executor.executar(sinal=deve_comprar,
                                             horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
                 operacoes.registrar(op)
 
             elif deve_vender != Sinalizacao.MANTER:
-                op = self.executor.executar(deve_vender,
+                op = self.executor.executar(sinal=deve_vender,
                                             horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=-1)
                 operacoes.registrar(op)
+
+            pos = Posicao[operacoes.pos_atual]
 
             rentabilidade['data'].append(timeseries.index[dia])
             rentabilidade['valor'].append(operacoes.calcular_pl_atual(timeseries[dia]))
