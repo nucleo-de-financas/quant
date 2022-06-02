@@ -5,9 +5,6 @@ from api.yahoo import HistoricoApi, Tickers
 from calculadora.analise_tecnica import MediaMovel
 
 
-
-
-
 @dataclass
 class GoldenCrossCompra(EstrategiaCompra):
 
@@ -52,8 +49,9 @@ class GoldenCrossVenda(EstrategiaVenda):
 if __name__ == "__main__":
     # Coletando Dados
     dados = HistoricoApi(Tickers.PETR4).obter(frequencia='1d', quanto_tempo='1y')
-    x = dados['Fechamento']
-    compra = GoldenCrossCompra(fechamento=dados['Fechamento'], janela_curta=15, janela_longa=30)
-    venda = GoldenCrossVenda(fechamento=dados['Fechamento'], janela_curta=15, janela_longa=30)
+    fechamento = dados['Fechamento']
+    fechamento.name = Tickers.PETR4.name
+    compra = GoldenCrossCompra(fechamento=fechamento, janela_curta=15, janela_longa=30)
+    venda = GoldenCrossVenda(fechamento=fechamento, janela_curta=15, janela_longa=30)
 
-    backtest = TrendFollowingBot(compra, venda).track_um_ativo(timeseries=dados['Fechamento'], pl_inicial=100)
+    backtest = TrendFollowingBot(compra, venda).track_um_ativo(timeseries=fechamento, pl_inicial=100)
