@@ -31,13 +31,13 @@ class EstrategiaVenda(ABC):
 class StopLoss(ABC):
 
     @abstractmethod
-    def deve_stopar_perda(self) -> Sinalizacao:
+    def deve_stopar_perda(self, preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
         pass
 
 
 class StopGain(ABC):
     @abstractmethod
-    def deve_stopar_ganho(self) -> Sinalizacao:
+    def deve_stopar_ganho(self, preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
         pass
 
 
@@ -51,10 +51,9 @@ class Executor(ABC):
 class ExecutorTF(Executor):
 
     def executar(self, sinal: Sinalizacao, horario: datetime.datetime, preco: float, qtde: int = 1) -> Operacao:
-        if sinal == Sinalizacao.VENDER or sinal.STOP_VENDA or sinal == Sinalizacao.COMPRAR or\
-                sinal == Sinalizacao.STOP_COMPRA:
+        if sinal == Sinalizacao.VENDER or sinal.STOP_VENDER or sinal == Sinalizacao.COMPRAR or\
+                sinal == Sinalizacao.STOP_COMPRAR:
             return Operacao(horario=horario, quantidade=qtde, preco=preco)
-
 
 
 class FormatoError(Exception):
@@ -68,30 +67,60 @@ class FormatoError(Exception):
 
 
 @dataclass
+class StopLossBasico(StopLoss):
+
+    max_loss: float = 0.03
+
+    def deve_stopar_perda(self,  preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
+        if posicao == Posicao.COMPRADO and (preco_atual/preco_medio - 1) < self.max_loss:
+            return Sinalizacao.STOP_VENDER
+        elif posicao == Posicao.VENDIDO and (preco_medio/preco_atual - 1) < self.max_loss:
+            return Sinalizacao.STOP_COMPRAR
+        return Sinalizacao.MANTER
+
+
+@dataclass
+class StopGainBasico(StopGain):
+
+    max_gain: float = 0.03
+
+    def deve_stopar_ganho(self,  preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
+        if posicao == Posicao.COMPRADO and (preco_atual/preco_medio - 1) > self.max_gain:
+            return Sinalizacao.STOP_VENDER
+        elif posicao == Posicao.VENDIDO and (preco_medio/preco_atual - 1) > self.max_gain:
+            return Sinalizacao.STOP_COMPRAR
+        return Sinalizacao.MANTER
+
+
+@dataclass
 class TrendFollowingBot:
+
     # Acessíveis
     estrategia_compra: EstrategiaCompra
     estrategia_venda: EstrategiaVenda
+    stop_loss: StopLoss = None
+    stop_gain: StopGain = None
     executor: Executor = ExecutorTF()
 
     @staticmethod
-    def _verificar_timeseries(timeseries: pd.Series) -> bool:
-        verificacoes = {'index': False, 'valores': False}
+    def _verificar_timeseries(timeseries: pd.Series) -> None:
 
-        if timeseries.index.name == 'data' or timeseries.index.name == 'Data':
-            verificacoes['index'] = True
-        if timeseries.dtype == 'float64' or timeseries.dtype == 'int64':
-            verificacoes['valores'] = True
-
-        return not (False in list(verificacoes.values()))
-
-    def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Operacoes, pd.Series]:
-
-        if not self._verificar_timeseries(timeseries):
+        if not (timeseries.index.name == 'data' or timeseries.index.name == 'Data'):
             raise FormatoError('O formato da série temporal não corresponde à:\n'
                                'index.name = data'
                                'index.dtype: [datetime64[ns]]'
                                'values: float64 | int64')
+
+        if not (timeseries.dtype == 'float64' or timeseries.dtype == 'int64'):
+
+            raise FormatoError('O formato da série temporal não corresponde à:\n'
+                               'index.name = data'
+                               'index.dtype: [datetime64[ns]]'
+                               'values: float64 | int64')
+
+    def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Operacoes, pd.Series]:
+
+        self._verificar_timeseries(timeseries)
 
         operacoes = Operacoes(ativo=str(timeseries.name), pl_inicial=pl_inicial)
         rentabilidade = {'data': [], 'valor': []}
@@ -114,6 +143,28 @@ class TrendFollowingBot:
                 op = self.executor.executar(sinal=deve_vender,
                                             horario=timeseries.index[dia], preco=timeseries.iloc[dia], qtde=-1)
                 operacoes.registrar(op)
+
+            if self.stop_loss is not None and deve_comprar == Sinalizacao.MANTER and deve_vender == Sinalizacao.MANTER:
+                deve_stopar_perda = self.stop_loss.deve_stopar_perda(
+                                    preco_atual=timeseries[dia],
+                                    posicao=operacoes.pos_atual,
+                                    preco_medio=operacoes.preco_medio())
+
+                if deve_stopar_perda != Sinalizacao.MANTER:
+                    op = self.executor.executar(sinal=deve_stopar_perda,
+                                                horario=timeseries.index[dia], preco=timeseries.iloc[dia], qtde=-1)
+                    operacoes.registrar(op)
+
+            if self.stop_gain is not None and deve_comprar == Sinalizacao.MANTER and deve_vender == Sinalizacao.MANTER:
+                deve_stopar_ganho = self.stop_gain.deve_stopar_ganho(
+                                    preco_atual=timeseries[dia],
+                                    posicao=operacoes.pos_atual,
+                                    preco_medio=operacoes.preco_medio())
+
+                if deve_stopar_ganho != Sinalizacao.MANTER:
+                    op = self.executor.executar(sinal=deve_stopar_ganho,
+                                                horario=timeseries.index[dia], preco=timeseries.iloc[dia], qtde=-1)
+                    operacoes.registrar(op)
 
             pos = operacoes.pos_atual
 

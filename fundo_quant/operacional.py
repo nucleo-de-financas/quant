@@ -16,8 +16,8 @@ class Posicao(Enum):
 class Sinalizacao(Enum):
     COMPRAR = auto()
     VENDER = auto()
-    STOP_COMPRA = auto()
-    STOP_VENDA = auto()
+    STOP_COMPRAR = auto()
+    STOP_VENDER = auto()
     MANTER = auto()
 
 

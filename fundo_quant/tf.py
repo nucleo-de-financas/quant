@@ -1,8 +1,8 @@
-from dataclasses import dataclass
-import pandas as pd
-from fundo_quant.TradingBot import EstrategiaCompra, EstrategiaVenda, Sinalizacao, Posicao, TrendFollowingBot
+from fundo_quant.TradingBot import *
 from api.yahoo import HistoricoApi, Tickers
 from calculadora.analise_tecnica import MediaMovel
+from dataclasses import dataclass
+import pandas as pd
 
 
 @dataclass
@@ -53,5 +53,8 @@ if __name__ == "__main__":
     fechamento.name = Tickers.PETR4.name
     compra = GoldenCrossCompra(fechamento=fechamento, janela_curta=15, janela_longa=30)
     venda = GoldenCrossVenda(fechamento=fechamento, janela_curta=15, janela_longa=30)
+    stop_loss = StopLossBasico(max_loss=0.05)
+    stop_gain = StopGainBasico(max_gain=0.03)
 
-    backtest = TrendFollowingBot(compra, venda).track_um_ativo(timeseries=fechamento, pl_inicial=100)
+    backtest = TrendFollowingBot(compra, venda, stop_loss, stop_gain).track_um_ativo(timeseries=fechamento, pl_inicial=100)
+    print('s')
