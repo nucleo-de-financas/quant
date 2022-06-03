@@ -1,12 +1,10 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum, auto
-
-import numpy as np
-import pandas as pd
 import datetime
-from typing import List, Tuple
+from enum import Enum, auto
+from typing import List
+import pandas as pd
 from copy import deepcopy
+import numpy as np
 
 
 class Posicao(Enum):
@@ -18,44 +16,9 @@ class Posicao(Enum):
 class Sinalizacao(Enum):
     COMPRAR = auto()
     VENDER = auto()
-    STOP_COMPRA = auto()
-    STOP_VENDA = auto()
+    STOP_COMPRAR = auto()
+    STOP_VENDER = auto()
     MANTER = auto()
-
-
-class EstrategiaCompra(ABC):
-
-    @abstractmethod
-    def deve_comprar(self) -> Sinalizacao:
-        pass
-
-    @abstractmethod
-    def avancar_dia(self):
-        pass
-
-
-class EstrategiaVenda(ABC):
-
-    @abstractmethod
-    def deve_vender(self) -> Sinalizacao:
-        pass
-
-    @abstractmethod
-    def avancar_dia(self):
-        pass
-
-
-class StopLoss(ABC):
-
-    @abstractmethod
-    def deve_stopar_perda(self) -> Sinalizacao:
-        pass
-
-
-class StopGain(ABC):
-    @abstractmethod
-    def deve_stopar_ganho(self) -> Sinalizacao:
-        pass
 
 
 class TipoOperacao(Enum):
@@ -103,8 +66,30 @@ class Operacao:
         else:
             raise InconsistenciaNaOperacaoError("Quantidade a ser operada não pode ser zero.")
 
+    def verificar_restricoes(self):
+        if self.quantidade == 0:
+            raise InconsistenciaNaOperacaoError("Quantidade a ser operada não pode ser zero.")
+        if self.preco < 0:
+            raise InconsistenciaNaOperacaoError(f"Não existe preço negativo. \n Preço: {self.preco}")
+
+    def _verificar_tipo_atts(self) -> bool:
+        """ Retorna True se as atributos estão preenchidos conforme o typing. """
+        horario_bool = isinstance(self.horario, datetime.datetime)
+        quantidade_bool = isinstance(self.quantidade, int)
+        preco_bool = isinstance(self.preco, float) or isinstance(self.preco, int)
+
+        return bool(horario_bool*quantidade_bool*preco_bool)
+
     def __post_init__(self):
-        # Infere o tipo de operação pela quantidade a ser executada.
+
+        # Verificando os tipos das variáveis.
+        if not self._verificar_tipo_atts():
+            raise InconsistenciaNaOperacaoError("Os tipos das variáveis não estão corretos.")
+
+        # Verificar números plausíveis para uma operação.
+        self.verificar_restricoes()
+
+        # Infere a operação pela quantidade a ser executada.
         self._inferir_tipo_operacao()
 
     @property
@@ -114,12 +99,6 @@ class Operacao:
     def valor_financeiro(self):
         return self.quantidade * self.preco
 
-    def retorno_nominal(self, preco_atual: float):
-        return preco_atual - self.preco
-
-    def retorno_percentual(self, preco_atual: float):
-        return preco_atual / self.preco - 1
-
 
 @dataclass
 class Operacoes:
@@ -128,28 +107,36 @@ class Operacoes:
     ativo: str
     pl_inicial: float
 
-    _operacoes = []
+    _operacoes: List = None
     _fechadas = pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
     _abertas = pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
 
     def __post_init__(self):
         self._caixa = [self.pl_inicial]
+        if self._operacoes is None:
+            self._operacoes = []
 
     @property
     def caixa_atual(self):
         return round(self._caixa[-1], 2)
 
     def obter_pos_atual(self):
-        return self._ops_to_df(self._operacoes).quantidade.sum()
+        df = self._ops_to_df(self._operacoes)
+        if df is not None:
+            return df.quantidade.sum()
+        return 0
 
-    def calcular_valor_pos(self, preco_atual: float):
-        return round(self.obter_pos_atual() * preco_atual, 2)
+    def _calcular_valor_pos(self, preco_atual: float):
+        return self.obter_pos_atual() * preco_atual
 
-    def calcular_pl_atual(self, preco_atual: float):
-        return round(self.caixa_atual + self.calcular_valor_pos(preco_atual=preco_atual), 2)
+    def _calcular_pl_atual(self, preco_atual: float):
+        return self.caixa_atual + self._calcular_valor_pos(preco_atual=preco_atual)
+
+    def pl_atual(self, preco_atual: float):
+        return round(self._calcular_pl_atual(preco_atual=preco_atual), 2)
 
     def retorno_acumulado(self, preco_atual):
-        return (self.calcular_pl_atual(preco_atual=preco_atual) / self.pl_inicial) - 1
+        return (self._calcular_pl_atual(preco_atual=preco_atual) / self.pl_inicial) - 1
 
     def _verificar_operacao(self, operacao: Operacao):
 
@@ -171,8 +158,9 @@ class Operacoes:
     def _segregar_ops(self):
         """ Segrega as operações em: (1) operações passadas e (2) operações atuais. """
         df = self._ops_to_df(self._operacoes)
-
-        inversoes = self.identifica_posicoes_zeros(df['quantidade'])
+        if df is None:
+            return
+        inversoes = self._identifica_posicoes_zeros(df['quantidade'])
 
         if len(inversoes) == 0:
             self._abertas = df
@@ -195,11 +183,11 @@ class Operacoes:
         # Toda a vez que for registrar, temos que verificar se é um registro possível. Isto é, se a operação
         # pode ser realizada.
 
-        def _ajustar_operacoes():
+        def _ajustar_operacoes(_operacoes: List[Operacao]):
             operacoes_ajustadas = []
             quantidade_cum0 = 0
             quantidade_cum1 = 0
-            for op in self._operacoes:
+            for op in _operacoes:
                 quantidade_cum1 += op.quantidade
                 if quantidade_cum1 > 0 > quantidade_cum0 or quantidade_cum1 < 0 < quantidade_cum0:
                     operacao1 = deepcopy(op)
@@ -212,7 +200,7 @@ class Operacoes:
                     operacoes_ajustadas.append(op)
                 quantidade_cum0 += op.quantidade
 
-            self._operacoes = operacoes_ajustadas
+            return operacoes_ajustadas
 
         if not self._verificar_operacao(operacao):
             raise SaldoError(f"Saldo insuficiente para a compra."
@@ -226,24 +214,25 @@ class Operacoes:
         self._calcular_novo_saldo(operacao)
 
         # Ajusta operações para nunca inverter diretamente.
-        _ajustar_operacoes()
+        self._operacoes = _ajustar_operacoes(self._operacoes)
 
         # Toda a vez que registrar, ele já segrega as operações.
         self._segregar_ops()
 
     @staticmethod
-    def _ops_to_df(operacoes: List[Operacao]):
+    def _ops_to_df(operacoes: List[Operacao]) -> pd.DataFrame | None:
         """ Transforma a lista de operações em dataframe. """
         dicts = []
         for op in operacoes:
             dicts.append(op.__dict__)
-        return pd.DataFrame(dicts).set_index('horario')
+        if len(dicts) > 0:
+            return pd.DataFrame(dicts).set_index('horario')
 
-    def identifica_posicoes_zeros(self, quantidades: pd.Series):
+    def _identifica_posicoes_zeros(self, quantidades: pd.Series):
         """ Identifica os toques da quantidade cumulativa no valor de zero. Ou seja, ultrapassando de cima para baixo
         ou de baixo para cima ou somente tocou e continuou no zero, esse algoritmo identifica os horários. """
 
-        qtde_cum = self.calcular_quantidade_cumulativa(quantidades)
+        qtde_cum = self._calcular_quantidade_cumulativa(quantidades)
         qtde_cum_anterior = qtde_cum - quantidades
 
         # Momento que inverteu de comprado para vendido.
@@ -255,13 +244,13 @@ class Operacoes:
         return toques_no_eixo.index
 
     @staticmethod
-    def calcular_quantidade_cumulativa(quantidade: pd.Series):
+    def _calcular_quantidade_cumulativa(quantidade: pd.Series):
         qtde_cum = quantidade.cumsum()
         qtde_cum.name = 'quantidade_cumulativa'
         return qtde_cum
 
     @staticmethod
-    def calcular_posicao(qtde_cum: pd.Series):
+    def _calcular_posicao(qtde_cum: pd.Series):
         # Definindo a série de posição.
         pos = qtde_cum.copy()
         pos.name = 'posicao'
@@ -278,8 +267,8 @@ class Operacoes:
         if not len(operacoes) > 0:
             return np.NAN
 
-        qtde_cum = self.calcular_quantidade_cumulativa(operacoes['quantidade'])
-        ultima_pos = self.calcular_posicao(qtde_cum).iloc[-1]
+        qtde_cum = self._calcular_quantidade_cumulativa(operacoes['quantidade'])
+        ultima_pos = self._calcular_posicao(qtde_cum).iloc[-1]
 
         qtde_posicionada = 0
         pmedio = 0
@@ -308,7 +297,7 @@ class Operacoes:
 
     def _dividir_operacoes(self) -> List[pd.DataFrame]:
         df = self.obter_df()
-        df['qtde_cum'] = self.calcular_quantidade_cumulativa(df['quantidade'])
+        df['qtde_cum'] = self._calcular_quantidade_cumulativa(df['quantidade'])
         id_ = 1
         ids = []
         for item in df['qtde_cum']:
@@ -353,7 +342,7 @@ class Operacoes:
             rentabilidade = {'quantidades': [], 'porcentagem': []}
             if df['quantidade'].sum() == 0:
 
-                df['pos'] = self.calcular_posicao(self.calcular_quantidade_cumulativa(df['quantidade']))
+                df['pos'] = self._calcular_posicao(self._calcular_quantidade_cumulativa(df['quantidade']))
                 pos = obter_posicao(df['pos'])
                 for index in range(len(df)):
 
@@ -379,98 +368,17 @@ class Operacoes:
         return pd.DataFrame(retornos)
 
     def obter_df(self):
-        return self._ops_to_df(self._operacoes)
+        df = self._ops_to_df(self._operacoes)
+        if df is None:
+            return pd.DataFrame(columns=['quantidade', 'preco', '_tipo'])
+        return df
 
     @property
     def pos_atual(self):
         pos_atual_qtde = self.obter_pos_atual()
         if pos_atual_qtde == 0:
-            return Posicao.ZERADO.name
+            return Posicao.ZERADO
         elif pos_atual_qtde > 0:
-            return Posicao.COMPRADO.name
+            return Posicao.COMPRADO
         elif pos_atual_qtde < 0:
-            return Posicao.VENDIDO.name
-
-
-class Executor(ABC):
-
-    @abstractmethod
-    def executar(self, sinal: Sinalizacao, horario: datetime.datetime, preco: float, qtde: int) -> Operacao:
-        pass
-
-
-class ExecutorTF(Executor):
-
-    def executar(self, sinal: Sinalizacao, horario: datetime.datetime, preco: float, qtde: int = 1) -> Operacao:
-        if sinal == Sinalizacao.VENDER or sinal.STOP_VENDA:
-            return Operacao(horario=horario, quantidade=-qtde, preco=preco)
-        elif sinal == Sinalizacao.COMPRAR or sinal == Sinalizacao.STOP_COMPRA:
-            return Operacao(horario=horario, quantidade=qtde, preco=preco)
-
-
-class FormatoError(Exception):
-
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
-
-    def __str__(self):
-        return self.message
-
-
-@dataclass
-class TrendFollowingBot:
-
-    # Acessíveis
-    estrategia_compra: EstrategiaCompra
-    estrategia_venda: EstrategiaVenda
-    executor: ExecutorTF
-
-    @staticmethod
-    def _verificar_timeseries(timeseries: pd.Series) -> bool:
-        verificacoes = {'index': False, 'valores': False}
-
-        if timeseries.index.name == 'data' and timeseries.index.dtype == '<M8[ns]':
-            verificacoes['index'] = True
-        if timeseries.index.dtype == 'float64' or timeseries.index.dtype == 'int64':
-            verificacoes['valores'] = True
-
-        return not(False in list(verificacoes.values()))
-
-    def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Operacoes, pd.Series]:
-
-        if not self._verificar_timeseries(timeseries):
-            raise FormatoError('O formato da série temporal não corresponde à:\n'
-                               'index.name = data'
-                               'index.dtype: [datetime64[ns]]'
-                               'values: float64 | int64')
-
-        operacoes = Operacoes(ativo=str(timeseries.name), pl_inicial=pl_inicial)
-        rentabilidade = {'data': [], 'valor': []}
-
-        # Iterando a quantidade de dias
-        for dia in range(len(timeseries)):
-
-            # Acionando estratégia
-            deve_comprar = self.estrategia_compra.deve_comprar()
-            deve_vender = self.estrategia_venda.deve_vender()
-
-            # Executando Sinais
-            if deve_comprar != Sinalizacao.MANTER:
-                op = self.executor.executar(deve_comprar,
-                                            horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=1)
-                operacoes.registrar(op)
-
-            elif deve_vender != Sinalizacao.MANTER:
-                op = self.executor.executar(deve_vender,
-                                            horario=timeseries.iloc[dia], preco=timeseries.iloc[dia], qtde=-1)
-                operacoes.registrar(op)
-
-            rentabilidade['data'].append(timeseries.index[dia])
-            rentabilidade['valor'].append(operacoes.calcular_pl_atual(timeseries[dia]))
-
-            # Avançando simulação de dados interna.
-            self.estrategia_compra.avancar_dia()
-            self.estrategia_venda.avancar_dia()
-
-        return operacoes, pd.Series(rentabilidade['valor'], index=rentabilidade['data'])
+            return Posicao.VENDIDO
