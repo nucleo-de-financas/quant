@@ -1,40 +1,11 @@
+import pandas as pd
+from yfinance import download
 from enum import Enum
+from dataclasses import dataclass
 
 
-class YahooPeriodo(Enum):
-    DIA_1 = '1d'
-    DIA_5 = '5d'
-    MES_1 = '1mo'
-    MES_3 = '3mo'
-    MES_6 = '6mo'
-    ANO_1 = '1y'
-    ANO_2 = '2y'
-    ANO_5 = '5y'
-    ANO_10 = '10y'
-    ANO_ATUAL = 'ytd'
-    YTD = 'ytd'
-    MAX = 'max'
-
-
-class YahooIntervalo(Enum):
-    """ Determina os períodos possíveis para a API"""
-    MIN_1 = '1m'
-    MIN_2 = '2m'
-    MIN_5 = '5m'
-    MIN_15 = '15m'
-    MIN_30 = '30m'
-    MIN_60 = '60m'
-    MIN_90 = '90m'
-    HORA_1 = '1h'
-    DIA_1 = '1d'
-    DIA_5 = '5d'
-    SEMANA_1 = '1wk'
-    MES_1 = '1mo'
-    MES_3 = '3mo'
-
-
-class YahooTickers(Enum):
-    ABEV3 = 'ABEV' + '.SA'
+class Tickers(Enum):
+    ABEV3 = 'ABEV3' + '.SA'
     AZUL4 = 'AZUL4' + '.SA'
     B3SA3 = 'B3SA3' + '.SA'
     BBAS3 = 'BBAS3' + '.SA'
@@ -109,3 +80,24 @@ class YahooTickers(Enum):
     VVAR3 = 'VVAR3' + '.SA'
     WEGE3 = 'WEGE3' + '.SA'
     YDUQ3 = 'YDUQ3' + '.SA'
+
+
+@dataclass
+class HistoricoApi:
+
+    ticker: Tickers
+
+    def __post_init__(self):
+        self.ticker = self.ticker.value
+
+    def obter(self, frequencia, quanto_tempo) -> pd.DataFrame:
+        df = download(self.ticker, period=quanto_tempo, interval=frequencia)
+        df.columns = ['Abertura', 'Maxima', 'Minima', 'Fechamento', 'Fechamento Ajustado', 'Volume']
+        df.index.name = 'Data'
+        return df
+
+
+if __name__ == "__main__":
+    x = HistoricoApi(Tickers.PETR3).obter(frequencia='1d', quanto_tempo='1m')
+    print(x)
+
