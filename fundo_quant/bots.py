@@ -1,59 +1,11 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
-import datetime
 from typing import Tuple
-from operacional import Posicao, Sinalizacao, Operacao, Operacoes
 
-
-class EstrategiaCompra(ABC):
-
-    @abstractmethod
-    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
-        pass
-
-    @abstractmethod
-    def avancar_dia(self):
-        pass
-
-
-class EstrategiaVenda(ABC):
-
-    @abstractmethod
-    def deve_vender(self, posicao: Posicao) -> Sinalizacao:
-        pass
-
-    @abstractmethod
-    def avancar_dia(self):
-        pass
-
-
-class StopLoss(ABC):
-
-    @abstractmethod
-    def deve_stopar_perda(self, preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
-        pass
-
-
-class StopGain(ABC):
-    @abstractmethod
-    def deve_stopar_ganho(self, preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
-        pass
-
-
-class Executor(ABC):
-
-    @abstractmethod
-    def executar(self, sinal: Sinalizacao, horario: datetime.datetime, preco: float, qtde: int) -> Operacao:
-        pass
-
-
-class ExecutorTF(Executor):
-
-    def executar(self, sinal: Sinalizacao, horario: datetime.datetime, preco: float, qtde: int = 1) -> Operacao:
-        if sinal == Sinalizacao.VENDER or sinal.STOP_VENDER or sinal == Sinalizacao.COMPRAR or\
-                sinal == Sinalizacao.STOP_COMPRAR:
-            return Operacao(horario=horario, quantidade=qtde, preco=preco)
+from fundo_quant.operacional import Posicao, Sinalizacao, Operacoes
+from fundo_quant.estrategia import EstrategiaCompra, EstrategiaVenda
+from fundo_quant.gerenciamento_risco import StopGain, StopLoss
+from fundo_quant.executor import Executor, ExecutorTF
 
 
 class FormatoError(Exception):
@@ -64,32 +16,6 @@ class FormatoError(Exception):
 
     def __str__(self):
         return self.message
-
-
-@dataclass
-class StopLossBasico(StopLoss):
-
-    max_loss: float = 0.03
-
-    def deve_stopar_perda(self,  preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
-        if posicao == Posicao.COMPRADO and (preco_atual/preco_medio - 1) < self.max_loss:
-            return Sinalizacao.STOP_VENDER
-        elif posicao == Posicao.VENDIDO and (preco_medio/preco_atual - 1) < self.max_loss:
-            return Sinalizacao.STOP_COMPRAR
-        return Sinalizacao.MANTER
-
-
-@dataclass
-class StopGainBasico(StopGain):
-
-    max_gain: float = 0.03
-
-    def deve_stopar_ganho(self,  preco_atual: float, posicao: Posicao, preco_medio: float) -> Sinalizacao:
-        if posicao == Posicao.COMPRADO and (preco_atual/preco_medio - 1) > self.max_gain:
-            return Sinalizacao.STOP_VENDER
-        elif posicao == Posicao.VENDIDO and (preco_medio/preco_atual - 1) > self.max_gain:
-            return Sinalizacao.STOP_COMPRAR
-        return Sinalizacao.MANTER
 
 
 @dataclass

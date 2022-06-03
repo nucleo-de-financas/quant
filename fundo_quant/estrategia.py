@@ -1,8 +1,31 @@
-from fundo_quant.TradingBot import *
-from api.yahoo import HistoricoApi, Tickers
-from calculadora.analise_tecnica import MediaMovel
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
+
+from fundo_quant.operacional import Posicao, Sinalizacao
+from calculadora.analise_tecnica import MediaMovel
+
+
+class EstrategiaCompra(ABC):
+
+    @abstractmethod
+    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
+        pass
+
+    @abstractmethod
+    def avancar_dia(self):
+        pass
+
+
+class EstrategiaVenda(ABC):
+
+    @abstractmethod
+    def deve_vender(self, posicao: Posicao) -> Sinalizacao:
+        pass
+
+    @abstractmethod
+    def avancar_dia(self):
+        pass
 
 
 @dataclass
@@ -44,17 +67,3 @@ class GoldenCrossVenda(EstrategiaVenda):
 
     def avancar_dia(self):
         self._dias_correntes += 1
-
-
-if __name__ == "__main__":
-    # Coletando Dados
-    dados = HistoricoApi(Tickers.PETR4).obter(frequencia='1d', quanto_tempo='1y')
-    fechamento = dados['Fechamento']
-    fechamento.name = Tickers.PETR4.name
-    compra = GoldenCrossCompra(fechamento=fechamento, janela_curta=15, janela_longa=30)
-    venda = GoldenCrossVenda(fechamento=fechamento, janela_curta=15, janela_longa=30)
-    stop_loss = StopLossBasico(max_loss=0.05)
-    stop_gain = StopGainBasico(max_gain=0.03)
-
-    backtest = TrendFollowingBot(compra, venda, stop_loss, stop_gain).track_um_ativo(timeseries=fechamento, pl_inicial=100)
-    print('s')
