@@ -4,7 +4,7 @@ from fundo_quant.bots import *
 from api.yahoo import HistoricoApi, Tickers
 
 
-if __name__ == "__main__":
+def fundo_v0():
     # Coletando Dados
     dados = HistoricoApi(Tickers.PETR4).obter(frequencia='1d', quanto_tempo='1y')
     fechamento = dados['Fechamento']
@@ -14,11 +14,10 @@ if __name__ == "__main__":
     stop_loss = StopLossBasico()
     stop_gain = StopGainBasico()
 
-    op, ret = TrendFollowingBot(compra, venda, stop_loss, stop_gain).track_um_ativo(timeseries=fechamento, pl_inicial=100)
-    print(op.obter_df())
-    import matplotlib.pyplot as plt
-    plt.plot(ret)
-    plt.show()
-    plt.plot(op.retornos_por_operacao().rentabilidade)
-    plt.show()
-    print(op)
+    bot = TrendFollowingBot(compra, venda, stop_loss, stop_gain)
+    op, ret = bot.track_um_ativo(timeseries=fechamento, pl_inicial=100)
+    return op, ret
+
+
+if __name__ == "__main__":
+    operacoes, retorno = fundo_v0()
