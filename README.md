@@ -3,6 +3,7 @@ Biblioteca Python produzida pelos membros da área Quantitativa do Núcleo de Fi
 
 # Contribuintes
 - Felipe Lima
+- Fernando Camillo
 
 # Guia do Usuário
 
