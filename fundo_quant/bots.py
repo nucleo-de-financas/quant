@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import pandas as pd
 from typing import Tuple
 
-from fundo_quant.operacional import Posicao, Sinalizacao, Operacoes
+from fundo_quant.operacional import Posicao, Sinalizacao, Historico
 from fundo_quant.estrategia import EstrategiaCompra, EstrategiaVenda
 from fundo_quant.gerenciamento_risco import StopGain, StopLoss
 from fundo_quant.executor import Executor, ExecutorTF
@@ -44,11 +44,11 @@ class TrendFollowingBot:
                                'index.dtype: [datetime64[ns]]'
                                'values: float64 | int64')
 
-    def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Operacoes, pd.Series]:
+    def track_um_ativo(self, timeseries: pd.Series, pl_inicial) -> Tuple[Historico, pd.Series]:
 
         self._verificar_timeseries(timeseries)
 
-        operacoes = Operacoes(ativo=str(timeseries.name), pl_inicial=pl_inicial)
+        operacoes = Historico(ativo=str(timeseries.name), pl_inicial=pl_inicial)
         rentabilidade = {'data': [], 'valor': []}
         pos: Posicao = Posicao.ZERADO
 

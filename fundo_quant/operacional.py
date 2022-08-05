@@ -1,29 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import datetime
 from enum import Enum, auto
 from typing import List
 import pandas as pd
 from copy import deepcopy
 import numpy as np
-
-
-class Posicao(Enum):
-    COMPRADO = auto()
-    VENDIDO = auto()
-    ZERADO = auto()
-
-
-class Sinalizacao(Enum):
-    COMPRAR = auto()
-    VENDER = auto()
-    STOP_COMPRAR = auto()
-    STOP_VENDER = auto()
-    MANTER = auto()
-
-
-class TipoOperacao(Enum):
-    COMPRA = 'C'
-    VENDA = 'V'
 
 
 class InconsistenciaNaOperacaoError(Exception):
@@ -46,62 +27,130 @@ class SaldoError(Exception):
         return self.message
 
 
-@dataclass
-class Operacao:
-    """
-    horario: Horario da transação (datetime)
-    quantidade: Quantidade transacionada. (int)
-    preco: preço do mercado naquele momento. (float)
-     """
-    horario: datetime.datetime
-    quantidade: int
+@dataclass(order=True)
+class Compra:
     preco: float
-    _tipo: TipoOperacao | None = None
+    quantidade: int
+    horario: datetime = field(compare=True)
 
-    def _inferir_tipo_operacao(self):
-        if self.quantidade > 0:
-            self._tipo = TipoOperacao.COMPRA
-        elif self.quantidade < 0:
-            self._tipo = TipoOperacao.VENDA
-        else:
-            raise InconsistenciaNaOperacaoError("Quantidade a ser operada não pode ser zero.")
-
-    def verificar_restricoes(self):
-        if self.quantidade == 0:
-            raise InconsistenciaNaOperacaoError("Quantidade a ser operada não pode ser zero.")
-        if self.preco < 0:
-            raise InconsistenciaNaOperacaoError(f"Não existe preço negativo. \n Preço: {self.preco}")
-
-    def _verificar_tipo_atts(self) -> bool:
-        """ Retorna True se as atributos estão preenchidos conforme o typing. """
-        horario_bool = isinstance(self.horario, datetime.datetime)
-        quantidade_bool = isinstance(self.quantidade, int)
-        preco_bool = isinstance(self.preco, float) or isinstance(self.preco, int)
-
-        return bool(horario_bool*quantidade_bool*preco_bool)
-
-    def __post_init__(self):
-
-        # Verificando os tipos das variáveis.
-        if not self._verificar_tipo_atts():
-            raise InconsistenciaNaOperacaoError("Os tipos das variáveis não estão corretos.")
-
-        # Verificar números plausíveis para uma operação.
-        self.verificar_restricoes()
-
-        # Infere a operação pela quantidade a ser executada.
-        self._inferir_tipo_operacao()
+    @staticmethod
+    def verificar_preco(preco):
+        if not isinstance(preco, float) or not isinstance(preco, int):
+            raise InconsistenciaNaOperacaoError("O tipo da quantidade não está correto.")
+        if preco < 0:
+            raise InconsistenciaNaOperacaoError(f"Não existe preço negativo. \n Preço: {preco}")
 
     @property
-    def tipo(self):
-        return self._tipo
-
     def valor_financeiro(self):
-        return self.quantidade * self.preco
+        return -(self.preco * self.quantidade)
 
+
+@dataclass(order=True)
+class Venda:
+    preco: float
+    quantidade: int
+    horario: datetime = field(compare=True)
+
+    @staticmethod
+    def verificar_preco(preco):
+        if not isinstance(preco, float) or not isinstance(preco, int):
+            raise InconsistenciaNaOperacaoError("O tipo da quantidade não está correto.")
+        if preco < 0:
+            raise InconsistenciaNaOperacaoError(f"Não existe preço negativo. \n Preço: {preco}")
+
+    @property
+    def valor_financeiro(self):
+        return self.preco * self.quantidade
+
+
+@dataclass()
+class Historico:
+
+    _operacoes: list[Compra | Venda] = None
+
+    def obter_compras(self) -> List[Compra] | None:
+        return [operacao for operacao in self._operacoes if isinstance(operacao, Compra)]
+
+    def obter_vendas(self) -> List[Venda] | None:
+        return [operacao for operacao in self._operacoes if isinstance(operacao, Venda)]
+
+    def obter_quantidade_comprada(self) -> int:
+        return sum([compra.quantidade for compra in self.obter_compras()])
+
+    def obter_quantidade_vendida(self) -> int:
+        return sum([venda.quantidade for venda in self.obter_vendas()])
+
+    def _adicionar_compra(self, preco: float, quantidade: int, horario: datetime):
+        self._operacoes.append(Compra(preco=preco, quantidade=quantidade, horario=horario))
+
+    def _adicionar_venda(self, preco: float, quantidade: int, horario: datetime):
+        self._operacoes.append(Venda(preco=preco, quantidade=quantidade, horario=horario))
+
+    def comprar(self, preco: float, quantidade: int, horario: datetime):
+        posicao = self.obter_posicao()
+        if quantidade > abs(posicao) and posicao < 0:
+            self.fechar_posicao(preco=preco, horario=horario)
+            self._adicionar_compra(preco=preco, quantidade=quantidade+posicao, horario=horario)
+        else:
+            self._adicionar_compra(preco=preco, quantidade=quantidade, horario=horario)
+
+    def vender(self, preco: float, quantidade: int, horario: datetime):
+        posicao = self.obter_posicao()
+        if quantidade > posicao > 0:
+            self.fechar_posicao(preco=preco, horario=horario)
+            self._adicionar_venda(preco=preco, quantidade=quantidade-posicao, horario=horario)
+        else:
+            self._adicionar_venda(preco=preco, quantidade=quantidade, horario=horario)
+
+    def obter_posicao(self) -> int:
+        return self.obter_quantidade_comprada() - self.obter_quantidade_vendida()
+
+    def fechar_posicao(self, preco: float, horario: datetime):
+        posicao = self.obter_posicao()
+        if posicao > 0:
+            self._adicionar_venda(preco=preco, quantidade=posicao, horario=horario)
+        elif posicao < 0:
+            self._adicionar_compra(preco=preco, quantidade=-posicao, horario=horario)
+
+    def inverter_posicao(self, preco: float, horario: datetime):
+        posicao = self.obter_posicao()
+        if posicao > 0:
+            self._adicionar_venda(preco=preco, quantidade=2 * posicao, horario=horario)
+        elif posicao < 0:
+            self._adicionar_compra(preco=preco, quantidade=-2 * posicao, horario=horario)
+
+    def obter_operacoes_abertas(self) -> List[Compra | Venda] | None:
+        posicao = self.obter_posicao()
+        if posicao == 0:
+            return
+        if posicao > 0:
+            operacoes = self.obter_compras()
+        else:
+            operacoes = self.obter_vendas()
+        operacoes.reverse()
+        soma = 0
+        operacoes_abertas = []
+        for operacao in operacoes:
+            soma = soma + operacao.quantidade
+            operacoes_abertas.append(operacao)
+            if soma == abs(posicao):
+                return operacoes_abertas
+
+
+class Conta:
+    ativo: str
+
+    def marcar_a_mercado(self):
+        pass
+
+    def obter_marcacao(self):
+        pass
+
+class Fundo:
+    conta: list[Conta]
 
 @dataclass
-class Operacoes:
+class Historico:
     """ Responsabilidade de separar/organizar as operações de um mesmo ativo. """
 
     ativo: str
@@ -147,7 +196,7 @@ class Operacoes:
             else:
                 return False
 
-        if operacao.tipo == TipoOperacao.COMPRA:
+        if operacao.tipo_operacao == TipoOperacao.COMPRA:
             return verificar_saldo_compra()
         else:
             return True

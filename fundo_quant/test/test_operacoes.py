@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 
-from fundo_quant.operacional import Operacoes, Operacao, Posicao
+from fundo_quant.operacional import Historico, Operacao, Posicao
 from datetime import datetime
 
 
 def test_registro_multiplo():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=1, preco=1)
     ops.registrar(op)
     op = Operacao(horario=datetime.now(), quantidade=2, preco=1)
@@ -21,7 +21,7 @@ def test_registro_multiplo():
 
 
 def test_saldo():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=1, preco=1)
     ops.registrar(op)
     assert ops.caixa_atual == 99
@@ -33,7 +33,7 @@ def test_saldo():
 
 
 def test_saldo_venda():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=-1, preco=1)
     ops.registrar(op)
     assert ops.caixa_atual == 101
@@ -45,19 +45,19 @@ def test_saldo_venda():
 
 
 def test_valor_posicao():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=3, preco=1)
     ops.registrar(op)
     assert ops._calcular_valor_pos(100) == 300
 
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=-3, preco=1)
     ops.registrar(op)
     assert ops._calcular_valor_pos(100) == -300
 
 
 def test_valor_pos_comprado():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=3, preco=1)
     ops.registrar(op)
     assert ops.obter_pos_atual() == 3
@@ -65,12 +65,12 @@ def test_valor_pos_comprado():
 
 def test_pos_qtde():
 
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=3, preco=1)
     ops.registrar(op)
     assert ops.obter_pos_atual() == 3
 
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=-3, preco=1)
     ops.registrar(op)
     assert ops.obter_pos_atual() == -3
@@ -81,7 +81,7 @@ def test_pos_qtde():
 
 
 def test_win_rate():
-    ops = Operacoes(ativo='PETR', pl_inicial=10000)
+    ops = Historico(ativo='PETR', pl_inicial=10000)
 
     # Teste lado comprado
 
@@ -125,7 +125,7 @@ def test_win_rate():
 
 
 def test_obter_df():
-    ops = Operacoes(ativo='PETR', pl_inicial=10000)
+    ops = Historico(ativo='PETR', pl_inicial=10000)
 
     assert isinstance(ops.obter_df(), pd.DataFrame)
     assert len(ops.obter_df()) == 0
@@ -140,7 +140,7 @@ def test_obter_df():
 
 
 def test_preco_medio():
-    ops = Operacoes(ativo='PETR', pl_inicial=10000)
+    ops = Historico(ativo='PETR', pl_inicial=10000)
 
     assert np.isnan(ops.preco_medio())
 
@@ -164,7 +164,7 @@ def test_preco_medio():
 
     assert ops.preco_medio() == 70/4
 
-    ops = Operacoes(ativo='PETR', pl_inicial=10000)
+    ops = Historico(ativo='PETR', pl_inicial=10000)
 
     assert np.isnan(ops.preco_medio())
 
@@ -190,7 +190,7 @@ def test_preco_medio():
 
 
 def test_retorno_acumulado():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
 
     assert ops.retorno_acumulado(10) == 0
 
@@ -255,7 +255,7 @@ def test_retorno_acumulado():
 
 # Todo: Reformular comportamento... Não sei se está certo calcular os rendimentos por operação dessa maneira.
 def test_retornos_por_operacao():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
 
     op = Operacao(horario=datetime.now(), quantidade=1, preco=10)
     ops.registrar(op)
@@ -287,7 +287,7 @@ def test_retornos_por_operacao():
 
 
 def test_pos_atual():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
 
     assert ops.pos_atual == Posicao.ZERADO
 
@@ -295,7 +295,7 @@ def test_pos_atual():
     ops.registrar(op)
     assert ops.pos_atual == Posicao.COMPRADO
 
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=-3, preco=1)
     ops.registrar(op)
     assert ops.pos_atual == Posicao.VENDIDO
@@ -305,7 +305,7 @@ def test_pos_atual():
     assert ops.pos_atual == Posicao.ZERADO
 
     # Inversão
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=-3, preco=1)
     ops.registrar(op)
     assert ops.pos_atual == Posicao.VENDIDO
@@ -315,7 +315,7 @@ def test_pos_atual():
     assert ops.pos_atual == Posicao.COMPRADO
 
     # Inversão
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
     op = Operacao(horario=datetime.now(), quantidade=3, preco=1)
     ops.registrar(op)
     assert ops.pos_atual == Posicao.COMPRADO
@@ -326,7 +326,7 @@ def test_pos_atual():
 
 
 def test_pl_atual():
-    ops = Operacoes(ativo='PETR', pl_inicial=100)
+    ops = Historico(ativo='PETR', pl_inicial=100)
 
     assert ops.pl_atual(preco_atual=100000000000) == 100
 
