@@ -1,5 +1,5 @@
 from fundo_quant.estrategia import GoldenCrossVenda, GoldenCrossCompra
-from fundo_quant.gerenciamento_risco import StopGainBasico, StopLossBasico
+from fundo_quant.stops import StopGainBasico, StopLossBasico
 from fundo_quant.bots import *
 from api.yahoo import HistoricoApi, Tickers
 

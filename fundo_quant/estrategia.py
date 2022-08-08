@@ -1,15 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import pandas as pd
-
-from fundo_quant.operacional import Posicao, Sinalizacao
 from calculadora.analise_tecnica import MediaMovel
 
 
 class EstrategiaCompra(ABC):
 
     @abstractmethod
-    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
+    def obter_sinal(self, posicao: Posicao) -> Sinalizacao:
         pass
 
     @abstractmethod
@@ -20,7 +17,7 @@ class EstrategiaCompra(ABC):
 class EstrategiaVenda(ABC):
 
     @abstractmethod
-    def deve_vender(self, posicao: Posicao) -> Sinalizacao:
+    def obter_sinal(self, posicao: Posicao) -> Sinalizacao:
         pass
 
     @abstractmethod
@@ -37,7 +34,7 @@ class GoldenCrossCompra(EstrategiaCompra):
 
     _dias_correntes: int = 1
 
-    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
+    def obter_sinal(self, posicao: Posicao) -> Sinalizacao:
         media_curta = MediaMovel.simples(self.fechamento.iloc[:self._dias_correntes], self.janela_curta)
         media_longa = MediaMovel.simples(self.fechamento.iloc[:self._dias_correntes], self.janela_longa)
 
