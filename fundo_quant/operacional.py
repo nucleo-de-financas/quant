@@ -170,7 +170,7 @@ class AtivoComSaldo:
 
     def _verificar_saldo_compra(self, preco: float, quantidade: int):
         valor_financeiro = preco * quantidade
-        if not self.saldo > valor_financeiro:
+        if valor_financeiro > self.saldo:
             raise SaldoError(f"Saldo de {round(self.saldo ,2)}"
                              f" insuficiente para compra no valor de {round(valor_financeiro,2)}")
 
@@ -256,6 +256,8 @@ class AtivoComSaldo:
         return round(self.obter_resultado_por_unidade_em_aberto(preco_atual) * abs(self.obter_posicao()), 10)
 
     def obter_resultado_em_aberto_pct(self, preco_atual: float):
+        if self.obter_valor_de_entrada_da_posicao() == 0:
+            return 0
         return self.obter_resultado_em_aberto(preco_atual=preco_atual) / self.obter_valor_de_entrada_da_posicao()
 
     def obter_patrimonio_liquido(self, preco_atual: float):

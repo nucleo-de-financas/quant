@@ -15,11 +15,13 @@ class ExecutorLongOnly:
     def _stopar_loss(self, preco: float, horario: datetime):
         if self.ativo.obter_resultado_em_aberto_pct(preco_atual=preco) < -abs(self.stop_loss) \
                 and self.ativo.obter_posicao() != 0:
+            print(f"Stopando a perda no preco R${round(preco, 2)}.")
             self.ativo.fechar_posicao(preco=preco, horario=horario)
 
     def _stopar_gain(self, preco: float, horario: datetime):
         if self.ativo.obter_resultado_em_aberto_pct(preco_atual=preco) > abs(self.stop_gain) \
                 and self.ativo.obter_posicao() != 0:
+            print(f"Stopando o ganho no preco R${round(preco, 2)}.")
             self.ativo.fechar_posicao(preco=preco, horario=horario)
 
     def _comprar(self, preco: float, horario: datetime):
@@ -38,7 +40,7 @@ class ExecutorLongOnly:
         if self.stop_loss is not None:
             self._stopar_loss(preco=preco, horario=horario)
 
-        if ordem == Ordem.COMPRAR:
+        if ordem == Ordem.COMPRAR and self.ativo.obter_posicao() == 0:
             self._comprar(preco=preco, horario=horario)
-        elif ordem == Ordem.VENDER:
+        elif ordem == Ordem.VENDER and self.ativo.obter_posicao() > 0:
             self._vender(preco=preco, horario=horario)
