@@ -1,11 +1,11 @@
 import pandas as pd
-from fundo_quant.estrategia import GoldenCrossLongOnly
+from fundo_quant.estrategia import Estrategia
 from fundo_quant.executores import ExecutorLongOnly
 
 
 class WalkForward:
 
-    def __init__(self, estrategia: GoldenCrossLongOnly,
+    def __init__(self, estrategia: Estrategia,
                  ex: ExecutorLongOnly,
                  precos: pd.Series,
                  atraso: int = 0):
@@ -13,7 +13,7 @@ class WalkForward:
         self.ex = ex
         self.precos = precos.sort_index().shift(atraso)
 
-    def rodar_treino(self):
+    def obter_serie_retorno(self):
         dia = 0
         pls = []
         for horario in self.precos.index:

@@ -15,6 +15,6 @@ def fundo_cripto(moeda: Moeda):
     media_curta = MediaMovel.exponencial(dados['Fechamento'], window=7)
     media_longa = MediaMovel.exponencial(dados['Fechamento'], window=14)
     estrategia = GoldenCrossLongOnly(bitcoin, media_curta=media_curta, media_longa=media_longa)
-    retorno = WalkForward(estrategia=estrategia, ex=ex, precos=dados['Fechamento']).rodar_treino()
+    retorno = WalkForward(estrategia=estrategia, ex=ex, precos=dados['Fechamento']).obter_serie_retorno()
     plt.plot(retorno)
     plt.show()
