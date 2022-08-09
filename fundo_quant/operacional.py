@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import datetime
 from typing import List
+from enum import Enum
 
 
 class SaldoError(Exception):
@@ -11,6 +12,11 @@ class SaldoError(Exception):
 
     def __str__(self):
         return self.message
+
+
+class Ordem(Enum):
+    COMPRAR = 1
+    VENDER = 2
 
 
 @dataclass(order=True)
