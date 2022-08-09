@@ -1,4 +1,4 @@
-from fundo_quant.fundos_versoes import fundo_cripto
+from fundo_quant.fundos import fundo_cripto
 from api.coinmarketcap import Moeda
 
 
