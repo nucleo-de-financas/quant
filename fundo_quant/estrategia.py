@@ -1,69 +1,45 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 import pandas as pd
-
-from fundo_quant.operacional import Posicao, Sinalizacao
-from calculadora.analise_tecnica import MediaMovel
+from fundo_quant.operacional import AtivoComSaldo, Ordem
 
 
-class EstrategiaCompra(ABC):
+class Estrategia(ABC):
 
     @abstractmethod
-    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
+    def obter_ordem(self) -> Ordem:
         pass
 
     @abstractmethod
-    def avancar_dia(self):
+    def setar_dia(self, i):
         pass
 
 
-class EstrategiaVenda(ABC):
+class GoldenCrossLongOnly(Estrategia):
 
-    @abstractmethod
-    def deve_vender(self, posicao: Posicao) -> Sinalizacao:
-        pass
+    _dia_atual = 0
 
-    @abstractmethod
-    def avancar_dia(self):
-        pass
+    def __init__(self, ativo: AtivoComSaldo,
+                 media_curta: pd.Series,
+                 media_longa: pd.Series):
+        self.media_curta = media_curta
+        self.media_longa = media_longa
+        self.ativo = ativo
 
+    def deve_comprar(self):
+        if self.media_curta.iloc[self._dia_atual] > self.media_longa.iloc[self._dia_atual] and \
+                self.ativo.obter_posicao() == 0:
+            return Ordem.COMPRAR
 
-@dataclass
-class GoldenCrossCompra(EstrategiaCompra):
+    def deve_vender(self):
+        if self.media_curta.iloc[self._dia_atual] < self.media_longa.iloc[self._dia_atual] and \
+                self.ativo.obter_posicao() > 0:
+            return Ordem.VENDER
 
-    fechamento: pd.Series
-    janela_curta: int
-    janela_longa: int
+    def obter_ordem(self) -> Ordem:
+        ordem = self.deve_comprar()
+        if ordem is not None:
+            return ordem
+        return self.deve_vender()
 
-    _dias_correntes: int = 1
-
-    def deve_comprar(self, posicao: Posicao) -> Sinalizacao:
-        media_curta = MediaMovel.simples(self.fechamento.iloc[:self._dias_correntes], self.janela_curta)
-        media_longa = MediaMovel.simples(self.fechamento.iloc[:self._dias_correntes], self.janela_longa)
-
-        if media_curta.iloc[-1] > media_longa.iloc[-1] and posicao == Posicao.ZERADO:
-            return Sinalizacao.COMPRAR
-        return Sinalizacao.MANTER
-
-    def avancar_dia(self):
-        self._dias_correntes += 1
-
-
-@dataclass
-class GoldenCrossVenda(EstrategiaVenda):
-    fechamento: pd.Series
-    janela_curta: int
-    janela_longa: int
-
-    _dias_correntes: int = 1
-
-    def deve_vender(self, posicao: Posicao) -> Sinalizacao:
-        media_curta = MediaMovel.simples(self.fechamento.iloc[:self._dias_correntes], self.janela_curta)
-        media_longa = MediaMovel.simples(self.fechamento.iloc[:self._dias_correntes], self.janela_longa)
-
-        if media_curta.iloc[-1] < media_longa.iloc[-1] and posicao == Posicao.COMPRADO:
-            return Sinalizacao.VENDER
-        return Sinalizacao.MANTER
-
-    def avancar_dia(self):
-        self._dias_correntes += 1
+    def setar_dia(self, i):
+        self._dia_atual = i

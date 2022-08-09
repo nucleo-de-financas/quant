@@ -30,7 +30,3 @@ class Api:
         df.columns = ['Data', 'Abertura', 'Maxima', 'Minima', 'Fechamento', 'Volume', 'MarketCap']
         df.set_index('Data', inplace=True)
         return df
-
-
-if __name__ == '__main__':
-    x = Api(Moeda.CARDANO).obter()
