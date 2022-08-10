@@ -21,6 +21,6 @@ class Api:
 
     @staticmethod
     def obter_serie(codigo: Codigos) -> pd.DataFrame:
-        serie = ipeadatapy.timeseries(codigo.value)
+        serie = ipeadatapy.timeseries(str(codigo.value))
         serie.dropna(inplace=True)
         return serie

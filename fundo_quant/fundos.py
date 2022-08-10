@@ -1,5 +1,5 @@
 from api.coinmarketcap import Api, Moeda
-from calculadora.analise_tecnica import MediaMovel
+from calculadora.indicadores.tendencia import MediaMovel
 from fundo_quant.operacional import AtivoComSaldo
 from fundo_quant.estrategia import GoldenCrossLongOnly
 from fundo_quant.executores import ExecutorLongOnly
