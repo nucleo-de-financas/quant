@@ -23,7 +23,7 @@ class Api:
     fim: datetime | str | None = None
 
     def __post_init__(self):
-        self._scraper = CmcScraper(self.moeda.value, self.inicio, self.fim)
+        self._scraper = CmcScraper(self.moeda.value, self.inicio, self.fim, fiat='BRL')
 
     def obter(self) -> pd.DataFrame:
         df = self._scraper.get_dataframe()

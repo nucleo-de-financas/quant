@@ -1,11 +1,11 @@
-from fundo_quant.operacional import AtivoComSaldo, Ordem
+from fundo_quant.operacional import Ativo, Ordem
 from datetime import datetime
 from math import floor
 
 
 class ExecutorLongOnly:
 
-    def __init__(self, ativo: AtivoComSaldo,
+    def __init__(self, ativo: Ativo,
                  stop_loss: float | None = None,
                  stop_gain: float | None = None):
         self.ativo = ativo

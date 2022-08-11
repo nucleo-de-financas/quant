@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-from fundo_quant.operacional import AtivoComSaldo, Ordem
+from fundo_quant.operacional import Ativo, Ordem
 
 
 class Estrategia(ABC):
@@ -18,7 +18,7 @@ class GoldenCrossLongOnly(Estrategia):
 
     _dia_atual = 0
 
-    def __init__(self, ativo: AtivoComSaldo,
+    def __init__(self, ativo: Ativo,
                  media_curta: pd.Series,
                  media_longa: pd.Series):
         self.media_curta = media_curta
