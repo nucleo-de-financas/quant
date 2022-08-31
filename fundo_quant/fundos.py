@@ -8,22 +8,23 @@ import matplotlib.pyplot as plt
 
 
 def fundo_cripto_v1(moeda: Moeda):
+
     # Coletando Dados
-    dados = Api(moeda).obter()
+    dados = Api(moeda=moeda).obter()
 
     # Configurando ativo
-    bitcoin = Ativo(saldo_inicial=10_000)
+    ativo = Ativo(saldo_inicial=1_000_000)
 
     # Configurando estratégia
     media_curta = MediaMovel.exponencial(dados['Fechamento'], window=7)
     media_longa = MediaMovel.exponencial(dados['Fechamento'], window=14)
-    estrategia = GoldenCrossLongOnly(bitcoin, media_curta=media_curta, media_longa=media_longa)
+    estrategia = GoldenCrossLongOnly(ativo, media_curta=media_curta, media_longa=media_longa)
 
     # Configurando executor
-    ex = ExecutorLongOnly(bitcoin)
+    ex = ExecutorLongOnly(ativo)
 
     # Rodando BackTest
-    retorno = WalkForward(estrategia=estrategia, ex=ex, precos=dados['Fechamento']).obter_serie_retorno_teste()
+    retorno = WalkForward(estrategia=estrategia, ex=ex, precos=dados['Fechamento']).obter_serie()
 
     # Plotando resultado
     plt.plot(retorno)
