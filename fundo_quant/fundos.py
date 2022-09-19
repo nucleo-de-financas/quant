@@ -13,7 +13,7 @@ def fundo_cripto_v1(moeda: Moeda):
     dados = Api(moeda=moeda).obter()
 
     # Configurando ativo
-    ativo = Ativo(saldo_inicial=1_000_000)
+    ativo = Ativo(saldo_inicial=1_000)
 
     # Configurando estratégia
     media_curta = MediaMovel.exponencial(dados['Fechamento'], window=7)
