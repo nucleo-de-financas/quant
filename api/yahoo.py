@@ -88,10 +88,10 @@ class HistoricoApi:
     ticker: Tickers
 
     def __post_init__(self):
-        self.ticker = self.ticker.value
+        self.ticker = self.ticker
 
     def obter(self, frequencia, quanto_tempo) -> pd.DataFrame:
-        df = download(self.ticker, period=quanto_tempo, interval=frequencia)
+        df = download(self.ticker.value, period=quanto_tempo, interval=frequencia)
         df.columns = ['Abertura', 'Maxima', 'Minima', 'Fechamento', 'Fechamento Ajustado', 'Volume']
         df.index.name = 'Data'
         return df

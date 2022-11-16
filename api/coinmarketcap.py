@@ -23,14 +23,10 @@ class Api:
     fim: datetime | str | None = None
 
     def __post_init__(self):
-        self._scraper = CmcScraper(self.moeda.value, self.inicio, self.fim)
+        self._scraper = CmcScraper(self.moeda.value, self.inicio, self.fim, fiat='BRL')
 
     def obter(self) -> pd.DataFrame:
         df = self._scraper.get_dataframe()
         df.columns = ['Data', 'Abertura', 'Maxima', 'Minima', 'Fechamento', 'Volume', 'MarketCap']
         df.set_index('Data', inplace=True)
         return df
-
-
-if __name__ == '__main__':
-    x = Api(Moeda.CARDANO).obter()
